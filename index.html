@@ -135,10 +135,16 @@
         // =========================================================================
         // --- Firebase Config and Initialization ---
         // Replace with your actual Firebase config or ensure it's provided by the environment
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Fallback config */ };
-        
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trivia-app';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyD2qmDEWrqKERcEQf36THyzYb3ip8TLQf4",
+  authDomain: "minturntrivia.firebaseapp.com",
+  projectId: "minturntrivia",
+  storageBucket: "minturntrivia.firebasestorage.app",
+  messagingSenderId: "465699900511",
+  appId: "1:465699900511:web:a1b7019bc82a5407881fea",
+  measurementId: "G-VEX4W50GEE"
+};
 
         // Global Firebase instances and user state
         let app;
@@ -1233,3 +1239,4 @@
     </script>
 </body>
 </html>
+

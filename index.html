@@ -16,10 +16,18 @@
         }
         body {
             font-family: 'Inter', sans-serif;
-            background-color: var(--background-color);
             color: var(--text-color);
             min-height: 100vh;
+            background: linear-gradient(45deg, #1a1a1a, #4a004a, #1a1a1a, #5a2000);
+            background-size: 400% 400%;
+            animation: gradientBG 25s ease infinite;
         }
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         h1, h2, h3 {
             font-family: 'Creepster', cursive;
         }
@@ -28,12 +36,18 @@
         .text-creepy-purple { color: var(--secondary-color); }
         .bg-creepy-purple { background-color: var(--secondary-color); }
         
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .card {
             background: rgba(40, 40, 40, 0.9);
             backdrop-filter: blur(5px);
             border-radius: 1rem;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
             border: 2px solid var(--primary-color);
+            animation: fadeIn 0.5s ease-out forwards;
         }
 
         .btn-menu, .btn-game, .btn-host {
@@ -42,7 +56,7 @@
         }
         .btn-menu:hover, .btn-game:hover, .btn-host:hover {
             box-shadow: 0 6px 0 var(--secondary-color);
-            transform: translateY(-2px);
+            transform: translateY(-2px) scale(1.02);
         }
         .btn-menu:active, .btn-game:active, .btn-host:active {
             box-shadow: 0 0 0 var(--secondary-color);
@@ -54,6 +68,7 @@
             transform: scale(1);
             border: 2px solid transparent;
             box-shadow: 0 4px 0px rgba(0, 0, 0, 0.3);
+            padding: 0.75rem;
         }
         .btn-answer:hover:not([disabled]) {
             transform: scale(1.02);
@@ -87,6 +102,12 @@
             background-color: #ff6600;
             width: 100%;
             transition: width 1s linear;
+            animation: pulseTimer 1.5s infinite ease-in-out;
+        }
+        @keyframes pulseTimer {
+            0% { filter: brightness(100%); }
+            50% { filter: brightness(130%); }
+            100% { filter: brightness(100%); }
         }
     </style>
 </head>
@@ -801,7 +822,7 @@
             const optionsMap = { A: 'bg-red-700', B: 'bg-blue-700', C: 'bg-yellow-700', D: 'bg-green-700' };
 
             const optionsHTML = Object.entries(currentQ.options).map(([key, value]) => {
-                let classes = `${optionsMap[key] || 'bg-gray-700'} p-4 rounded-xl text-xl font-bold w-full text-center btn-answer`;
+                let classes = `${optionsMap[key] || 'bg-gray-700'} rounded-xl font-bold w-full text-center btn-answer flex items-center space-x-4`;
                 if (answeredKey === key) {
                     classes += ' selected ring-4 ring-creepy-orange';
                 }
@@ -809,7 +830,8 @@
                 return `
                     <button onclick="window.submitAnswer('${key}')" ${isAnswered ? 'disabled' : ''}
                         class="${classes}">
-                        ${value}
+                        <span class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-black/20 rounded-lg text-2xl font-black">${key}</span>
+                        <span class="text-left text-xl">${value}</span>
                     </button>
                 `;
             }).join('');
@@ -860,19 +882,23 @@
             const optionsMap = { A: 'bg-red-700', B: 'bg-blue-700', C: 'bg-yellow-700', D: 'bg-green-700' };
             
             const optionsHTML = Object.entries(currentQ.options).map(([key, value]) => {
-                let classes = `${optionsMap[key] || 'bg-gray-700'} p-4 rounded-xl text-xl font-bold w-full text-center opacity-60`;
+                let classes = `${optionsMap[key] || 'bg-gray-700'} p-4 rounded-xl text-xl font-bold w-full text-center opacity-60 flex items-center space-x-4`;
                 let icon = '';
 
                 if (key === correctKey) {
-                    classes = 'bg-green-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-green-400 opacity-100';
-                    icon = '<i class="fas fa-check ml-2"></i>';
+                    classes = 'bg-green-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-green-400 opacity-100 flex items-center space-x-4';
+                    icon = '<i class="fas fa-check ml-auto"></i>';
                 } else if (key === answeredKey) {
                     // Highlight player's wrong answer
-                    classes = 'bg-red-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-red-400 opacity-100';
-                    icon = '<i class="fas fa-times ml-2"></i>';
+                    classes = 'bg-red-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-red-400 opacity-100 flex items-center space-x-4';
+                    icon = '<i class="fas fa-times ml-auto"></i>';
                 }
                 
-                return `<div class="${classes}">${value}${icon}</div>`;
+                return `<div class="${classes}">
+                            <span class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-black/20 rounded-lg text-2xl font-black">${key}</span>
+                            <span class="text-left text-xl">${value}</span>
+                            ${icon}
+                        </div>`;
             }).join('');
 
             const html = `
@@ -900,9 +926,9 @@
 
              const playerRankings = sortedPlayers.map((p, index) => {
                  let medalIcon = '';
-                 if (index === 0) medalIcon = '<i class="fas fa-trophy text-yellow-500"></i>';
-                 if (index === 1) medalIcon = '<i class="fas fa-medal text-gray-400"></i>';
-                 if (index === 2) medalIcon = '<i class="fas fa-medal text-yellow-700"></i>';
+                 if (index === 0) medalIcon = '<i class="fas fa-trophy text-yellow-500 text-3xl"></i>';
+                 if (index === 1) medalIcon = '<i class="fas fa-medal text-gray-400 text-2xl"></i>';
+                 if (index === 2) medalIcon = '<i class="fas fa-medal text-yellow-700 text-xl"></i>';
 
                  const highlightClass = p.id === userId ? 'ring-4 ring-creepy-orange bg-gray-600/50' : 'bg-gray-700/50';
 
@@ -910,7 +936,7 @@
                     <li class="flex justify-between items-center p-4 rounded-xl my-2 shadow-xl ${highlightClass} transition duration-300 transform hover:scale-[1.01]">
                         <div class="flex items-center space-x-3">
                             <span class="text-2xl font-black w-8 text-center text-gray-300">${index + 1}</span>
-                            <span class="text-3xl mr-2" style="color:${p.color};">${medalIcon}</span>
+                            <span class="text-3xl mr-2 w-8 text-center" style="color:${p.color};">${medalIcon}</span>
                             <span class="text-xl font-bold" style="color:${p.color};">${p.name}</span>
                         </div>
                         <span class="text-2xl font-extrabold text-creepy-orange">${p.score} <span class="text-sm font-normal text-gray-400">PTS</span></span>
@@ -975,7 +1001,7 @@
             return `
                 <div class="mt-6 p-4 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
                     <h3 class="text-sm font-semibold text-gray-400 mb-2">HOST CONTROLS</h3>
-                    <div class="flex flex-wrap gap-3">
+                    <div class="flex flex-wrap justify-center gap-3">
                         ${showPause ? pauseBtn : ''}
                         ${deleteBtn}
                     </div>
@@ -1033,7 +1059,7 @@
                             class="w-full p-4 mt-8 bg-green-500 hover:bg-green-600 text-white font-extrabold rounded-lg text-3xl btn-game shadow-green-700/50">
                             <i class="fas fa-bomb mr-3"></i> START TRIVIA!
                         </button>
-                    ` : '<p class="mt-6 text-xl animate-pulse">Waiting for the Host to start...</p>'}
+                    ` : '<p class="mt-6 text-xl animate-pulse">Initializing Host...</p>'}
                 `;
             }
 
@@ -1093,7 +1119,7 @@
                     <div class="${backgroundColor} p-4 rounded-xl text-lg font-bold w-full text-center shadow-lg relative overflow-hidden ${revealClass}">
                         <div class="absolute inset-0 bg-white/20 transition-all duration-500" style="width: ${isReveal ? barWidth : 0}%"></div>
                         <div class="relative z-10 flex flex-col items-center">
-                            <span class="inline-block w-8 h-8 text-center bg-white text-black rounded-full text-xl font-black mb-2">${key}</span>
+                            <span class="inline-block w-10 h-10 flex items-center justify-center bg-black/20 rounded-lg text-2xl font-black mb-2">${key}</span>
                             <span class="text-2xl">${value}</span>
                             ${isReveal ? `
                                 <div class="mt-3 text-3xl font-black text-creepy-orange">
@@ -1150,13 +1176,13 @@
 
              const playerRankings = sortedPlayers.map((p, index) => {
                  let medalIcon = '';
-                 if (index === 0) medalIcon = '<i class="fas fa-crown text-yellow-500"></i>';
+                 if (index === 0) medalIcon = '<i class="fas fa-crown text-yellow-500 text-5xl"></i>';
 
                  return `
                     <li class="flex justify-between items-center p-5 rounded-xl my-2 shadow-2xl bg-gray-700/50 hover:scale-[1.01] transition-transform duration-300">
                         <div class="flex items-center space-x-4">
                             <span class="text-4xl font-black w-10 text-creepy-orange text-center">${index + 1}</span>
-                            <span class="text-4xl" style="color:${p.color};">${medalIcon}</span>
+                            <span class="text-4xl w-10 text-center" style="color:${p.color};">${medalIcon}</span>
                             <span class="text-3xl font-bold" style="color:${p.color};">${p.name}</span>
                         </div>
                         <span class="text-4xl font-extrabold text-creepy-orange">${p.score} <span class="text-lg font-normal text-gray-400">PTS</span></span>
@@ -1214,13 +1240,6 @@
                 userData = currentUserData;
                 render();
             });
-            
-            // Fallback render loop for player mode to update timer bars (if any)
-            if (!isTVMode) {
-                // This is less critical now but can be useful for UI animations
-                // Let's remove it to prevent unnecessary re-renders
-                // setInterval(render, 1000); 
-            }
         }
 
         async function initializeAppAndAuth() {
@@ -1241,6 +1260,12 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
+                    
+                    if (isTVMode) {
+                        // This client is a host, it must assert its host status
+                        await initializeGameData(); 
+                    }
+                    
                     // Auth is ready, set up listeners
                     setupListeners();
                     // Call render once auth is complete to move from "Checking in"

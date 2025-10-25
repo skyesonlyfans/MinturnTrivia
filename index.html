@@ -36,38 +36,60 @@
             border: 2px solid var(--primary-color);
         }
 
-        .btn-game {
-            transition: all 0.1s ease;
+        .btn-game, .btn-host {
+            transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             box-shadow: 0 4px 0 var(--secondary-color);
-            border: 1px solid var(--secondary-color);
         }
-        .btn-game:hover {
+        .btn-game:hover, .btn-host:hover {
             box-shadow: 0 6px 0 var(--secondary-color);
             transform: translateY(-2px);
         }
-        .btn-game:active {
+        .btn-game:active, .btn-host:active {
             box-shadow: 0 0 0 var(--secondary-color);
             transform: translateY(4px);
         }
-
+        
+        /* Answer Button Styling for Player View */
         .btn-answer {
-            transition: all 0.1s ease;
+            transition: all 0.2s ease-in-out;
             transform: scale(1);
             border: 2px solid transparent;
+            box-shadow: 0 4px 0px rgba(0, 0, 0, 0.3);
         }
-        .btn-answer:hover {
+        .btn-answer:hover:not([disabled]) {
             transform: scale(1.02);
             border: 2px solid var(--primary-color);
+            box-shadow: 0 8px 0px rgba(0, 0, 0, 0.4);
         }
-        .btn-answer.selected {
-            border-color: #4ade80; /* Green */
-            box-shadow: 0 0 10px #4ade80;
+        .btn-answer[disabled] {
+            opacity: 0.7;
+            cursor: not-allowed;
         }
-        .btn-answer.correct {
-            background-color: #10b981 !important; /* Tailwind green-500 */
+
+        /* TV Answer Reveal Animation */
+        .tv-option-reveal {
+            opacity: 0.2;
+            transition: all 0.5s ease-out;
         }
-        .btn-answer.incorrect {
-            background-color: #ef4444 !important; /* Tailwind red-500 */
+        .tv-option-reveal.correct-answer {
+            opacity: 1;
+            background-color: #10b981 !important; /* Green */
+            transform: scale(1.05);
+        }
+        
+        /* Timer Bar */
+        #timer-bar-container {
+            height: 12px;
+            background-color: #555;
+            border-radius: 6px;
+            overflow: hidden;
+            width: 100%;
+        }
+        #timer-bar {
+            height: 100%;
+            background-color: #ff6600;
+            width: 100%;
+            transition: width 1s linear; /* Smooth visual decay */
         }
     </style>
 </head>
@@ -75,13 +97,13 @@
 
     <!-- Main Application Container -->
     <div id="app" class="flex flex-col items-center p-4 sm:p-8">
-        <!-- UPDATED TITLE TO BE SOLID ORANGE -->
+        <!-- Main Title -->
         <h1 class="text-6xl sm:text-7xl font-bold mb-4 text-creepy-orange tracking-widest text-center">
             Halloween Trivia
         </h1>
 
         <!-- Content will be rendered here based on state (Lobby, Game, Scoreboard) -->
-        <div id="game-content" class="w-full max-w-4xl">
+        <div id="game-content" class="w-full max-w-6xl">
             <!-- Loading/Error State Placeholder -->
             <div id="loading-state" class="card p-6 text-center">
                 <i class="fas fa-ghost fa-spin text-4xl text-creepy-orange mb-4"></i>
@@ -104,27 +126,18 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // Imports updated for clean usage (removed unused and confirmed 'getDocs' is present)
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, runTransaction, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, runTransaction, updateDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // NOTE: setLogLevel('Debug') is commented out but can be used for advanced debugging
+        // import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // setLogLevel('Debug');
+
 
         // =========================================================================
-        // --- Firebase Config and Initialization (Hardcoded for deployment) ---
-        // The configuration is now hardcoded below. If you change your Firebase
-        // project, you MUST update this section.
-        const firebaseConfig = {
-            apiKey: "AIzaSyD2qmDEWrqKERcEQf36THyzYb3ip8TLQf4",
-            authDomain: "minturntrivia.firebaseapp.com",
-            projectId: "minturntrivia",
-            storageBucket: "minturntrivia.firebasestorage.app",
-            messagingSenderId: "465699900511",
-            appId: "1:465699900511:web:a1b7019bc82a5407881fea",
-            measurementId: "G-VEX4W50GEE"
-        };
+        // --- Firebase Config and Initialization ---
+        // Replace with your actual Firebase config or ensure it's provided by the environment
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Fallback config */ };
         
-        // Hardcoded application ID for Firestore pathing: /artifacts/{appId}/public/data/
-        const appId = 'minturntrivia-app';
-        
-        // The auth token is handled by the canvas environment or falls back to an undefined value.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trivia-app';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
 
         // Global Firebase instances and user state
@@ -132,34 +145,42 @@
         let db;
         let auth;
         let userId;
-        let userData; // Stores the current user's profile (name, color, score)
+        let userData; // Stores the current user's profile (name, score)
 
         const APP_COLLECTION = `artifacts/${appId}/public/data/game-state`;
         const PLAYERS_COLLECTION = `artifacts/${appId}/public/data/players`;
         const GAME_DOC_ID = 'main-game';
         
+        // Game Constants
+        const QUESTION_TIME_SECONDS = 15;
+        const INTERMISSION_TIME_SECONDS = 10;
+        
         // Local state
         let gameState = {
-            status: 'loading', // 'loading', 'lobby', 'in_progress', 'scoring', 'finished'
-            currentQuestion: null, // index of question
+            status: 'loading', // 'lobby', 'question', 'reveal', 'intermission', 'finished'
+            currentQuestion: -1, 
             questions: [],
-            hostId: null,
-            timer: 0,
-            questionStartTime: 0,
+            hostId: null, // Host is always the first user who triggers initialization
+            isPaused: false,
+            questionStartTime: 0, // Timestamp when the current state started (for timing)
             players: {},
-            lastAnswer: null, // Stores {answer: 'A', timestamp: 123}
             correctAnswer: null,
+            transitionTimeEnd: 0, // Used for intermission timer
         };
+        
+        // Host-only variables for the automated game loop
+        let gameLoopInterval = null;
 
-        const TV_MODE_DELAY = 1000; // Delay for TV mode state transitions
-
-        // Utility: Show a temporary message
+        // =========================================================================
+        // --- Utility Functions ---
+        // =========================================================================
+        
         function showMessage(text, isError = false) {
             const messageBox = document.getElementById('message-box');
             const messageText = document.getElementById('message-text');
 
             messageText.textContent = text;
-            messageBox.style.backgroundColor = isError ? '#ef4444' : '#1f2937'; // Red for error, dark gray otherwise
+            messageBox.style.backgroundColor = isError ? '#ef4444' : '#1f2937';
             messageBox.style.opacity = '1';
             
             setTimeout(() => {
@@ -167,12 +188,7 @@
             }, 3000);
         }
 
-        // Utility: Generate player ID if not authenticated (shouldn't happen with anonymous auth, but as fallback)
-        function generateTemporaryId() {
-            return 'temp-' + Math.random().toString(36).substring(2, 9);
-        }
-        
-        // Utility: Base64 to ArrayBuffer for playing audio
+        // TTS Utilities (Same as previous, required for audio feedback)
         function base64ToArrayBuffer(base64) {
             const binaryString = window.atob(base64);
             const len = binaryString.length;
@@ -183,7 +199,12 @@
             return bytes.buffer;
         }
 
-        // Utility: Convert PCM to WAV format
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+        
         function pcmToWav(pcm16, sampleRate = 24000) {
             const numChannels = 1;
             const bitsPerSample = 16;
@@ -198,13 +219,13 @@
             
             // FMT sub-chunk
             writeString(view, 12, 'fmt ');
-            view.setUint32(16, 16, true); // Sub-chunk size: 16
-            view.setUint16(20, 1, true); // Audio format (1 for PCM)
-            view.setUint16(22, numChannels, true); // Number of channels
-            view.setUint32(24, sampleRate, true); // Sample rate
-            view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true); // Byte rate
-            view.setUint16(32, numChannels * (bitsPerSample / 8), true); // Block align
-            view.setUint16(34, bitsPerSample, true); // Bits per sample
+            view.setUint32(16, 16, true); 
+            view.setUint16(20, 1, true); 
+            view.setUint16(22, numChannels, true); 
+            view.setUint32(24, sampleRate, true); 
+            view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true); 
+            view.setUint16(32, numChannels * (bitsPerSample / 8), true); 
+            view.setUint16(34, bitsPerSample, true); 
             
             // DATA sub-chunk
             writeString(view, 36, 'data');
@@ -220,34 +241,20 @@
             return new Blob([buffer], { type: 'audio/wav' });
         }
 
-        // Utility: Helper for writing string to DataView
-        function writeString(view, offset, string) {
-            for (let i = 0; i < string.length; i++) {
-                view.setUint8(offset + i, string.charCodeAt(i));
-            }
-        }
-
-        // Utility: Play audio from a text prompt
         async function playTTS(text) {
             const payload = {
-                contents: [{
-                    parts: [{ text: text }]
-                }],
+                contents: [{ parts: [{ text: text }] }],
                 generationConfig: {
                     responseModalities: ["AUDIO"],
-                    speechConfig: {
-                        voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: "Fenrir" }
-                        }
-                    }
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Fenrir" } } },
                 },
                 model: "gemini-2.5-flash-preview-tts"
             };
-            const apiKey = "";
+            const apiKey = ""; // Canvas provides this dynamically
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
 
             try {
-                // Implementing exponential backoff for API call
+                // Implement exponential backoff for API call
                 const maxRetries = 3;
                 let attempt = 0;
                 let response;
@@ -255,23 +262,16 @@
                 while (attempt < maxRetries) {
                     try {
                         response = await fetch(apiUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
                         });
-
                         if (response.ok) break;
-
                         if (response.status === 429) {
-                            // Too Many Requests, implement backoff
                             const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
                             await new Promise(resolve => setTimeout(resolve, delay));
                         } else {
-                            // Non-retryable error
                             throw new Error(`API returned status ${response.status}`);
                         }
                     } catch (error) {
-                        // Network error or other fetch-related issues
                         if (attempt === maxRetries - 1) throw error;
                     }
                     attempt++;
@@ -289,7 +289,6 @@
                     const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
                     
                     const pcmData = base64ToArrayBuffer(audioData);
-                    // API returns signed PCM16 audio data.
                     const pcm16 = new Int16Array(pcmData);
                     
                     const wavBlob = pcmToWav(pcm16, sampleRate);
@@ -297,21 +296,18 @@
                     
                     const audio = new Audio(audioUrl);
                     audio.play();
-                } else {
-                    console.error("TTS response missing audio data or invalid mime type.");
                 }
 
             } catch (error) {
                 console.error("Error generating or playing TTS:", error);
             }
         }
-
+        
         // =========================================================================
-        // --- Game Logic Functions (Shared) ---
+        // --- Game Logic Functions ---
         // =========================================================================
         
         async function fetchQuestions() {
-            // NOTE: The `trivia.json.txt` file is accessible in the environment.
             try {
                 const response = await fetch('trivia.json.txt');
                 if (!response.ok) throw new Error("Trivia file not found.");
@@ -319,253 +315,128 @@
                 return data;
             } catch (e) {
                 console.error("Failed to load trivia questions:", e);
-                // Fallback dummy data if file access fails
+                // Hardcoded fallback data if file access fails
                 return [
-                    { category: "Test", question: "What color is a ghost?", options: { "A": "White", "B": "Black", "C": "Orange", "D": "Purple" }, answer: "A" },
-                    { category: "Test", question: "What is 1 + 1?", options: { "A": "1", "B": "2", "C": "3", "D": "4" }, answer: "B" },
-                    { category: "Test", question: "The Blair Witch Project was released in...", options: { "A": "1997", "B": "1999", "C": "2001", "D": "2003" }, answer: "B" },
+                    { category: "Fallback", question: "What ancient festival is the origin of Halloween?", options: { "A": "Beltane", "B": "Samhain", "C": "Lughnasadh", "D": "Yule" }, answer: "B" },
+                    { category: "Fallback", question: "In the film *Halloween*, what mask does Michael Myers wear?", options: { "A": "Clown", "B": "Shatner", "C": "Hockey", "D": "Ghostface" }, answer: "B" },
                 ];
             }
         }
 
         /**
-         * Initializes the game state in Firestore if it doesn't exist.
+         * Initializes the game state in Firestore (Host/TV only).
          */
         async function initializeGameData() {
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
-            const gameDoc = await getDoc(gameDocRef);
+            
+            // Check if game exists and is ready for host assignment
+            const docSnap = await updateDoc(gameDocRef, { 
+                hostId: userId 
+            }).catch(async (e) => {
+                // If update fails, the document likely doesn't exist, so create it.
+                if (e.code === 'not-found') {
+                    const questions = await fetchQuestions();
+                    // Shuffle questions
+                    for (let i = questions.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [questions[i], questions[j]] = [questions[j], questions[i]];
+                    }
 
-            if (!gameDoc.exists()) {
-                const questions = await fetchQuestions();
-                
-                // Shuffle questions
-                for (let i = questions.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [questions[i], questions[j]] = [questions[j], questions[i]];
+                    const initialData = {
+                        status: 'lobby',
+                        currentQuestion: -1,
+                        totalQuestions: questions.length,
+                        questions: questions,
+                        hostId: userId,
+                        isPaused: false,
+                        questionStartTime: Date.now(),
+                        correctAnswer: null,
+                        transitionTimeEnd: 0,
+                        lastUpdate: Date.now(),
+                    };
+                    await setDoc(gameDocRef, initialData);
+                    showMessage("New Game Created!");
                 }
+            });
+        }
+        
+        /**
+         * Resets the entire game state and deletes player documents.
+         */
+        async function deleteGame() {
+            if (gameState.hostId !== userId) {
+                showMessage("Only the host can reset the game.", true);
+                return;
+            }
+            if (!confirm('Are you sure you want to delete the entire game and all player data?')) return;
 
-                const initialData = {
-                    status: 'lobby',
-                    currentQuestion: -1, // -1 means no question is active (lobby/finished)
-                    totalQuestions: questions.length,
-                    questions: questions,
-                    hostId: userId, // Current user is the host
-                    timer: 0,
-                    questionStartTime: 0,
-                    players: {}, // Managed separately by the player listener
-                    lastUpdateTime: Date.now(),
-                    correctAnswer: null, // 'A', 'B', 'C', 'D'
-                    showScoreboard: false, // Flag to show mid-game scoreboard on TV
-                };
-                await setDoc(gameDocRef, initialData);
+            // 1. Delete Game State Document
+            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
+            await deleteDoc(gameDocRef);
+            
+            // 2. Delete All Player Documents (Requires fetching all and deleting individually)
+            const playerDocsQuery = query(collection(db, PLAYERS_COLLECTION));
+            const playerDocsSnapshot = await getDocs(playerDocsQuery);
+            const deletePromises = playerDocsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+            await Promise.all(deletePromises);
+            
+            // Re-initialize state to trigger lobby refresh
+            showMessage("Game has been completely deleted. Starting fresh...");
+            await initializeGameData();
+        }
+
+        /**
+         * Host-only function to start/resume/pause the game.
+         */
+        async function togglePause(shouldPause) {
+            if (gameState.hostId !== userId) return;
+            
+            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
+            await updateDoc(gameDocRef, {
+                isPaused: shouldPause,
+                questionStartTime: Date.now(), // Reset start time to current time on resume
+                lastUpdate: Date.now(),
+            });
+            showMessage(shouldPause ? "Game Paused." : "Game Resumed!");
+            if (!shouldPause) {
+                playTTS("Game resumed.");
             }
         }
 
         /**
-         * Attempts to join the game by setting up the user's profile.
+         * Attempts to join the game (Player view only).
          */
         async function joinGame(name, color) {
-            if (!userId) {
-                showMessage("Authentication failed. Cannot join game.", true);
-                return;
-            }
+            if (!userId) { showMessage("Authentication failed.", true); return; }
             
             const playerDocRef = doc(db, PLAYERS_COLLECTION, userId);
-            const playerDoc = await getDoc(playerDocRef);
-
-            if (playerDoc.exists()) {
-                showMessage("You are already in the game.", false);
-                return;
-            }
-
             try {
                 await setDoc(playerDocRef, {
                     id: userId,
                     name: name,
                     color: color,
                     score: 0,
-                    isHost: gameState.hostId === userId,
                     lastAnswer: null, // {questionIndex: 0, answer: 'A', timeTaken: 500}
                     joinedAt: Date.now(),
-                });
+                }, { merge: true }); // Use merge to avoid overwriting existing player data (name/color) if rejoining
                 showMessage(`Welcome, ${name}!`);
             } catch (e) {
                 console.error("Error joining game: ", e);
                 showMessage("Failed to join game.", true);
             }
         }
-
-        /**
-         * Host-only function to start the game.
-         */
-        async function startGame() {
-            if (gameState.hostId !== userId) {
-                showMessage("Only the host can start the game.", true);
-                return;
-            }
-            if (Object.keys(gameState.players).length < 1) {
-                showMessage("You need at least one player to start.", true);
-                return;
-            }
-
-            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
-            try {
-                await updateDoc(gameDocRef, {
-                    status: 'in_progress',
-                    currentQuestion: 0,
-                    questionStartTime: Date.now(),
-                    timer: 15, // Initial timer for the first question
-                    lastUpdateTime: Date.now(),
-                    showScoreboard: false,
-                });
-                showMessage("Game started!");
-                playTTS("Game has started! Question number one is coming up!");
-            } catch (e) {
-                console.error("Error starting game: ", e);
-                showMessage("Failed to start game.", true);
-            }
-        }
         
-        /**
-         * Host-only function to advance to the next question or the final scoreboard.
-         */
-        async function nextQuestion() {
-            if (gameState.hostId !== userId) {
-                showMessage("Only the host can advance.", true);
-                return;
-            }
-
-            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
-            const nextIndex = gameState.currentQuestion + 1;
-            
-            // If the game is in scoring state, we move to the next question (or finish)
-            if (gameState.status === 'scoring') {
-                if (nextIndex < gameState.totalQuestions) {
-                    // Start next question
-                    try {
-                        await updateDoc(gameDocRef, {
-                            status: 'in_progress',
-                            currentQuestion: nextIndex,
-                            questionStartTime: Date.now(),
-                            timer: 15, // Reset timer
-                            lastUpdateTime: Date.now(),
-                            correctAnswer: null,
-                            showScoreboard: false,
-                        });
-                        const questionNumber = nextIndex + 1;
-                        playTTS(`Question number ${questionNumber}`);
-                        showMessage(`Starting Question ${questionNumber}.`);
-                    } catch (e) {
-                        console.error("Error advancing question: ", e);
-                        showMessage("Failed to advance question.", true);
-                    }
-                } else {
-                    // End game
-                    try {
-                        await updateDoc(gameDocRef, {
-                            status: 'finished',
-                            currentQuestion: -1,
-                            lastUpdateTime: Date.now(),
-                            correctAnswer: null,
-                            showScoreboard: true,
-                        });
-                        playTTS("The final question is complete. The game is over! Let's see the final scores.");
-                        showMessage("Game finished. Showing final scoreboard.");
-                    } catch (e) {
-                        console.error("Error finishing game: ", e);
-                        showMessage("Failed to finish game.", true);
-                    }
-                }
-            } else if (gameState.status === 'in_progress' || gameState.status === 'lobby') {
-                // If it's still in progress, the host clicks to reveal the answer.
-                revealAnswer();
-            }
-        }
-
-        /**
-         * Host-only function to reveal the answer and initiate scoring.
-         */
-        async function revealAnswer() {
-            if (gameState.hostId !== userId) {
-                showMessage("Only the host can reveal the answer.", true);
-                return;
-            }
-            if (gameState.status !== 'in_progress') return;
-
-            const currentQ = gameState.questions[gameState.currentQuestion];
-            const correctKey = currentQ.answer;
-
-            // 1. Update Game State to reveal answer
-            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
-            await updateDoc(gameDocRef, {
-                status: 'scoring',
-                correctAnswer: correctKey,
-                lastUpdateTime: Date.now(),
-            });
-            playTTS(`The correct answer is ${correctKey}`);
-            
-            showMessage(`Answer revealed: ${correctKey}. Calculating scores...`);
-
-            // 2. Score calculation using a Transaction (ensures atomicity)
-            const playerDocsQuery = query(collection(db, PLAYERS_COLLECTION));
-            const playerDocsSnapshot = await getDocs(playerDocsQuery); // getDocs is imported now
-
-            for (const playerDoc of playerDocsSnapshot.docs) {
-                const playerId = playerDoc.id;
-                const playerDocRef = doc(db, PLAYERS_COLLECTION, playerId);
-                const playerAnswer = gameState.players[playerId]?.lastAnswer;
-                
-                // Only process answers for the current question
-                if (playerAnswer && playerAnswer.questionIndex === gameState.currentQuestion) {
-                    await runTransaction(db, async (transaction) => {
-                        const freshDoc = await transaction.get(playerDocRef);
-                        if (!freshDoc.exists()) return;
-
-                        let currentScore = freshDoc.data().score || 0;
-                        let scoreDelta = 0;
-
-                        if (playerAnswer.answer === correctKey) {
-                            // Max points: 1000. Time is from 0ms to 15000ms.
-                            // Fast answers get more points.
-                            const maxTime = gameState.timer * 1000;
-                            const timeRatio = Math.max(0, 1 - (playerAnswer.timeTaken / maxTime));
-                            scoreDelta = 500 + Math.round(timeRatio * 500); // 500 base + up to 500 bonus
-                        }
-
-                        if (scoreDelta > 0) {
-                            transaction.update(playerDocRef, {
-                                score: currentScore + scoreDelta,
-                                lastAnswer: {...playerAnswer, pointsAwarded: scoreDelta},
-                            });
-                        } else {
-                            // Clear lastAnswer if incorrect to stop score calculation on re-clicks
-                            transaction.update(playerDocRef, {
-                                lastAnswer: {...playerAnswer, pointsAwarded: 0},
-                            });
-                        }
-                    });
-                }
-            }
-        }
-
         /**
          * Player function to submit an answer.
          */
         async function submitAnswer(answerKey) {
-            if (gameState.status !== 'in_progress' || !userData) return;
+            if (gameState.status !== 'question' || !userData || gameState.isPaused) return;
             
             const timeElapsed = Date.now() - gameState.questionStartTime;
-
-            // Prevent answering after the timer runs out (or after the 15-second window)
-            if (timeElapsed > gameState.timer * 1000) {
-                 showMessage("Time's up! Cannot submit an answer.", true);
+            
+            if (timeElapsed >= QUESTION_TIME_SECONDS * 1000) {
+                 showMessage("Too late! Time is up.", true);
                  return;
-            }
-
-            // Check if player has already answered this question
-            const existingAnswer = userData.lastAnswer;
-            if (existingAnswer && existingAnswer.questionIndex === gameState.currentQuestion) {
-                // Allow player to change their mind, but update the time taken
             }
 
             const playerDocRef = doc(db, PLAYERS_COLLECTION, userId);
@@ -586,88 +457,220 @@
         }
         
         /**
-         * Host-only function to show the scoreboard mid-game.
+         * Host-only function to score all answers for the current question.
          */
-        async function toggleScoreboard() {
-            if (gameState.hostId !== userId) {
-                showMessage("Only the host can toggle the scoreboard.", true);
-                return;
-            }
-            if (gameState.status !== 'scoring') {
-                showMessage("Scoreboard can only be shown after an answer is revealed.", true);
-                return;
-            }
-            
-            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
-            try {
-                await updateDoc(gameDocRef, {
-                    showScoreboard: !gameState.showScoreboard,
-                });
-                showMessage(gameState.showScoreboard ? "Scoreboard hidden." : "Scoreboard shown.");
-            } catch (e) {
-                console.error("Error toggling scoreboard: ", e);
-                showMessage("Failed to toggle scoreboard.", true);
+        async function calculateAndScore() {
+            const currentQ = gameState.questions[gameState.currentQuestion];
+            const correctKey = currentQ.answer;
+
+            const playerDocsQuery = query(collection(db, PLAYERS_COLLECTION));
+            const playerDocsSnapshot = await getDocs(playerDocsQuery);
+
+            const maxTimeMs = QUESTION_TIME_SECONDS * 1000;
+
+            for (const playerDoc of playerDocsSnapshot.docs) {
+                const playerId = playerDoc.id;
+                const playerDocRef = doc(db, PLAYERS_COLLECTION, playerId);
+                const player = gameState.players[playerId];
+                const playerAnswer = player?.lastAnswer;
+                
+                // Only process answers for the current question that haven't been scored
+                if (playerAnswer && 
+                    playerAnswer.questionIndex === gameState.currentQuestion && 
+                    !playerAnswer.pointsAwarded // Check if points were already awarded
+                    ) {
+                    
+                    await runTransaction(db, async (transaction) => {
+                        const freshDoc = await transaction.get(playerDocRef);
+                        if (!freshDoc.exists()) return;
+
+                        let currentScore = freshDoc.data().score || 0;
+                        let scoreDelta = 0;
+
+                        if (playerAnswer.answer === correctKey) {
+                            // Points based on speed: 500 base + up to 500 bonus
+                            const timeTaken = Math.min(playerAnswer.timeTaken, maxTimeMs);
+                            const timeRatio = 1 - (timeTaken / maxTimeMs);
+                            scoreDelta = 500 + Math.round(timeRatio * 500); 
+                        }
+
+                        transaction.update(playerDocRef, {
+                            score: currentScore + scoreDelta,
+                            lastAnswer: {...playerAnswer, pointsAwarded: scoreDelta},
+                        });
+                    });
+                }
             }
         }
-        
+
         // =========================================================================
-        // --- Rendering and View Management ---
+        // --- Host/TV Game Loop (Automated Control) ---
+        // Runs only on the client where `isTVMode` is true.
         // =========================================================================
 
-        const gameContent = document.getElementById('game-content');
-        const tvModeBtn = document.getElementById('tv-mode-btn');
         const isTVMode = window.location.search.includes('view=tv');
+        let gameContent = document.getElementById('game-content');
+        let tvModeBtn = document.getElementById('tv-mode-btn');
 
         if (isTVMode) {
             tvModeBtn.textContent = 'Player Mode';
             tvModeBtn.onclick = () => window.location.href = window.location.pathname;
         } else {
-            tvModeBtn.textContent = 'TV Display Mode';
+            tvModeBtn.textContent = 'Host/TV Display Mode';
             tvModeBtn.onclick = () => window.location.href = window.location.pathname + '?view=tv';
         }
 
+        async function hostGameLoop() {
+            if (!db || gameState.hostId !== userId || gameState.isPaused || !document.hidden) return;
+
+            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
+            const now = Date.now();
+            let updatePayload = { lastUpdate: now };
+            let shouldUpdate = false;
+            
+            // --- State Logic ---
+            
+            switch (gameState.status) {
+                case 'question':
+                    const timeElapsed = now - gameState.questionStartTime;
+                    
+                    // If time is up, transition to 'reveal'
+                    if (timeElapsed >= QUESTION_TIME_SECONDS * 1000) {
+                        const currentQ = gameState.questions[gameState.currentQuestion];
+                        updatePayload.status = 'reveal';
+                        updatePayload.correctAnswer = currentQ.answer;
+                        updatePayload.questionStartTime = now;
+                        updatePayload.transitionTimeEnd = now + INTERMISSION_TIME_SECONDS * 1000;
+                        shouldUpdate = true;
+                        
+                        // Score answers immediately before the UI updates
+                        await calculateAndScore();
+                        playTTS(`Time is up! The correct answer is ${currentQ.answer}`);
+                    }
+                    break;
+
+                case 'reveal':
+                    // If in reveal state, wait for the transition time to end
+                    if (now >= gameState.transitionTimeEnd) {
+                        const nextQuestionIndex = gameState.currentQuestion + 1;
+                        
+                        if (nextQuestionIndex < gameState.totalQuestions) {
+                            // Transition to 'intermission' (brief scoreboard before next question)
+                            updatePayload.status = 'intermission';
+                            updatePayload.questionStartTime = now;
+                            updatePayload.transitionTimeEnd = now + 5000; // Show scoreboard for 5 seconds
+                            shouldUpdate = true;
+                            playTTS("Here are the current scores before the next round.");
+                        } else {
+                            // Game finished
+                            updatePayload.status = 'finished';
+                            updatePayload.currentQuestion = -1;
+                            updatePayload.questionStartTime = now;
+                            shouldUpdate = true;
+                            playTTS("The game is over! Let's see the final scores.");
+                        }
+                    }
+                    break;
+                    
+                case 'intermission':
+                    // If intermission is over, transition to the next question
+                    if (now >= gameState.transitionTimeEnd) {
+                        const nextQuestionIndex = gameState.currentQuestion + 1;
+                        
+                        if (nextQuestionIndex < gameState.totalQuestions) {
+                            updatePayload.status = 'question';
+                            updatePayload.currentQuestion = nextQuestionIndex;
+                            updatePayload.questionStartTime = now;
+                            updatePayload.correctAnswer = null;
+                            updatePayload.transitionTimeEnd = 0;
+                            shouldUpdate = true;
+                            playTTS(`Question number ${nextQuestionIndex + 1}!`);
+                        }
+                    }
+                    break;
+                    
+                case 'lobby':
+                case 'finished':
+                    // Do nothing, wait for host interaction (Start/Delete Game)
+                    break;
+            }
+
+            if (shouldUpdate) {
+                try {
+                    await updateDoc(gameDocRef, updatePayload);
+                } catch (e) {
+                    console.error("Host loop update failed:", e);
+                }
+            }
+        }
+        
+        function startGame() {
+            if (gameState.hostId !== userId || gameState.status !== 'lobby') return;
+            if (Object.keys(gameState.players).length < 1) {
+                showMessage("Need at least one player to start!", true);
+                return;
+            }
+            const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
+            updateDoc(gameDocRef, {
+                status: 'question',
+                currentQuestion: 0,
+                questionStartTime: Date.now(),
+                isPaused: false,
+                correctAnswer: null,
+                lastUpdate: Date.now(),
+                transitionTimeEnd: 0,
+            }).then(() => {
+                showMessage("Game started!");
+                playTTS("Welcome to the Halloween Trivia Showdown! Question number one!");
+            }).catch(e => {
+                console.error("Error starting game:", e);
+                showMessage("Failed to start game.", true);
+            });
+        }
+        
+        // Start the host loop only if in TV mode and authorized
+        function startHostLoop() {
+            if (isTVMode && gameState.hostId === userId && !gameLoopInterval) {
+                gameLoopInterval = setInterval(hostGameLoop, 1000); // Check every second
+            }
+        }
+
+        // =========================================================================
+        // --- Rendering and View Management ---
+        // =========================================================================
+
         function render() {
-            // Determine the current view state
             let view = 'loading';
             if (!userId) {
-                view = 'loading'; // Wait for auth
-            } else if (!userData && gameState.status === 'lobby') {
+                view = 'loading';
+            } else if (gameState.status === 'lobby' && !userData && !isTVMode) {
                 view = 'join';
             } else if (gameState.status === 'lobby') {
                 view = 'lobby';
-            } else if (gameState.status === 'in_progress') {
+            } else if (gameState.status === 'question') {
                 view = 'question';
-            } else if (gameState.status === 'scoring') {
-                view = 'scoring';
+            } else if (gameState.status === 'reveal') {
+                view = 'reveal';
+            } else if (gameState.status === 'intermission') {
+                view = 'scoreboard'; // Use scoreboard view during intermission
             } else if (gameState.status === 'finished') {
                 view = 'scoreboard';
             }
 
-            // Apply TV mode override
             if (isTVMode) {
-                if (view === 'join' || view === 'lobby') {
-                    // TV shows the lobby (QR code) in both cases
-                    renderLobbyTV();
-                } else if (view === 'question' || view === 'scoring' || view === 'finished') {
-                    // Show game/scoring/final screen
-                    renderGameTV();
-                } else {
-                    gameContent.innerHTML = `<div class="card p-6 text-center text-2xl">Awaiting Host Initialization...</div>`;
-                }
-                return;
+                renderTVView(view);
+            } else {
+                renderPlayerView(view);
             }
+        }
+        
+        // --- PLAYER VIEW RENDERING ---
 
-            // --- Player View Rendering ---
-            
+        function renderPlayerView(view) {
             switch (view) {
-                case 'loading':
-                    gameContent.innerHTML = `<div class="card p-6 text-center">
-                        <i class="fas fa-spinner fa-spin text-4xl text-creepy-orange mb-4"></i>
-                        <p class="text-xl">Checking for ghosts...</p>
-                    </div>`;
-                    break;
                 case 'join':
-                    renderJoinForm();
+                    // Re-use logic from previous version for join form
+                    renderJoinForm(); 
                     break;
                 case 'lobby':
                     renderLobbyPlayer();
@@ -675,21 +678,23 @@
                 case 'question':
                     renderQuestionPlayer();
                     break;
-                case 'scoring':
+                case 'reveal':
+                case 'intermission': // Player sees answer reveal until next question starts
                     renderScoringPlayer();
                     break;
                 case 'scoreboard':
+                case 'finished':
                     renderScoreboardPlayer();
                     break;
+                case 'loading':
                 default:
-                    gameContent.innerHTML = `<div class="card p-6 text-center text-xl text-red-500">
-                        <i class="fas fa-exclamation-triangle mr-2"></i>Game State Error.
+                    gameContent.innerHTML = `<div class="card p-6 text-center">
+                        <i class="fas fa-ghost fa-spin text-4xl text-creepy-orange mb-4"></i>
+                        <p class="text-xl">Checking in...</p>
                     </div>`;
             }
         }
         
-        // --- Player Rendering Functions ---
-
         function renderJoinForm() {
             let colors = ['#e91e63', '#9c27b0', '#2196f3', '#009688', '#ff9800', '#f44336'];
             let selectedColor = colors[0];
@@ -698,11 +703,10 @@
                 return colors.map(c => `
                     <button type="button" data-color="${c}" style="background-color: ${c};" 
                         class="color-btn w-10 h-10 rounded-full mx-1 shadow-lg border-2 ${c === selectedColor ? 'border-white ring-2 ring-creepy-orange' : 'border-gray-500'}"
-                        onclick="selectColor('${c}')"></button>
+                        onclick="window.selectColor('${c}')"></button>
                 `).join('');
             }
             
-            // Expose selectColor to global scope temporarily for inline click handler
             window.selectColor = (c) => {
                 selectedColor = c;
                 document.querySelectorAll('.color-btn').forEach(btn => {
@@ -719,7 +723,7 @@
                     <form id="join-form" class="space-y-4">
                         <div>
                             <label for="player-name" class="block text-sm font-semibold mb-1">Your Spooky Nickname:</label>
-                            <input type="text" id="player-name" placeholder="Enter your name" required 
+                            <input type="text" id="player-name" placeholder="Enter your name" required maxlength="15"
                                 class="w-full p-3 rounded bg-gray-700 text-white border border-gray-600 focus:border-creepy-orange focus:ring-1 focus:ring-creepy-orange">
                         </div>
                         <div>
@@ -747,66 +751,37 @@
         }
 
         function renderLobbyPlayer() {
-            const isHost = gameState.hostId === userId;
             const playerCount = Object.keys(gameState.players).length;
-            const playersList = Object.values(gameState.players)
-                .map(p => `
-                    <li class="flex justify-between items-center p-3 rounded-lg bg-gray-700/50 my-2 shadow">
-                        <span class="text-lg font-semibold" style="color:${p.color};">${p.name}</span>
-                        ${p.isHost ? '<span class="text-xs text-creepy-orange font-bold">HOST <i class="fas fa-crown"></i></span>' : ''}
-                    </li>
-                `).join('');
-
             const html = `
                 <div class="card p-8 w-full max-w-xl mx-auto mt-10 text-center">
                     <h2 class="text-4xl text-creepy-purple mb-4">Lobby Waiting...</h2>
-                    <p class="mb-6 text-gray-400">Welcome, <span style="color:${userData?.color || '#fff'}; font-weight:bold;">${userData?.name || 'Player'}</span>!</p>
-                    
-                    ${isHost ? `
-                        <div class="mb-8">
-                            <button onclick="startGame()" 
-                                class="w-full p-4 bg-green-500 hover:bg-green-600 text-white font-extrabold rounded-lg text-xl btn-game shadow-green-700/50">
-                                Start Game (${playerCount} Players)
-                            </button>
-                            <p class="text-sm text-gray-400 mt-2">The TV screen has the QR code for others to join.</p>
-                        </div>
-                    ` : `
-                        <div class="mb-8">
-                            <p class="text-xl text-gray-300 animate-pulse">Waiting for the Host to start...</p>
-                        </div>
-                    `}
-                    
-                    <h3 class="text-xl text-creepy-orange font-bold mb-3">Players Joined:</h3>
-                    <ul class="text-left max-h-64 overflow-y-auto">
-                        ${playersList || '<li class="text-center text-gray-500 p-4">No other players have joined yet.</li>'}
-                    </ul>
+                    <p class="mb-8 text-gray-400">Welcome, <span style="color:${userData?.color || '#fff'}; font-weight:bold;">${userData?.name || 'Player'}</span>!</p>
+                    <p class="text-xl text-gray-300 animate-pulse mb-4">Waiting for the Host to start...</p>
+                    <p class="text-3xl font-extrabold text-creepy-orange">${playerCount} Players Ready</p>
                 </div>
             `;
             gameContent.innerHTML = html;
-            window.startGame = startGame;
         }
 
         function renderQuestionPlayer() {
             const questionIndex = gameState.currentQuestion;
             const currentQ = gameState.questions[questionIndex];
-            if (!currentQ) {
-                 gameContent.innerHTML = `<div class="card p-6 text-center text-xl text-red-500">Question not found.</div>`;
-                 return;
-            }
+            if (!currentQ) return;
 
             const isAnswered = userData?.lastAnswer?.questionIndex === questionIndex;
             const answeredKey = isAnswered ? userData.lastAnswer.answer : null;
             
+            const optionsMap = { A: 'bg-red-700', B: 'bg-blue-700', C: 'bg-yellow-700', D: 'bg-green-700' };
+
             const optionsHTML = Object.entries(currentQ.options).map(([key, value]) => {
-                let classes = 'p-4 rounded-xl text-lg font-bold w-full text-left transition-colors duration-100 bg-gray-700 hover:bg-gray-600 btn-answer';
+                let classes = `${optionsMap[key] || 'bg-gray-700'} p-4 rounded-xl text-xl font-bold w-full text-center btn-answer`;
                 if (answeredKey === key) {
                     classes += ' selected ring-4 ring-creepy-orange';
                 }
                 
                 return `
-                    <button onclick="submitAnswer('${key}')" ${isAnswered ? 'disabled' : ''}
+                    <button onclick="window.submitAnswer('${key}')" ${isAnswered ? 'disabled' : ''}
                         class="${classes}">
-                        <span class="inline-block w-6 h-6 text-center bg-creepy-orange text-black rounded-full mr-3">${key}</span>
                         ${value}
                     </button>
                 `;
@@ -814,18 +789,22 @@
 
             const html = `
                 <div class="card p-6 mt-4">
-                    <p class="text-sm text-creepy-purple mb-1 font-semibold">Category: ${currentQ.category}</p>
-                    <h2 class="text-3xl sm:text-4xl font-extrabold mb-6">${currentQ.question}</h2>
+                    <div class="flex justify-between items-center mb-6 border-b border-gray-700 pb-3">
+                        <p class="text-lg text-creepy-purple font-semibold">Q${questionIndex + 1} / ${gameState.totalQuestions}</p>
+                        <p class="text-lg text-gray-400">Category: ${currentQ.category}</p>
+                    </div>
+                    
+                    <h2 class="text-4xl font-extrabold mb-8 text-center text-gray-200">${currentQ.question}</h2>
                     
                     <div id="answer-options" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         ${optionsHTML}
                     </div>
                     
-                    <div class="mt-6 text-center">
-                        <p class="text-lg text-gray-400">
+                    <div class="mt-8 text-center">
+                        <p class="text-xl text-gray-400">
                             ${isAnswered ? 
-                                `<span class="text-green-400 font-bold"><i class="fas fa-check-circle mr-2"></i>Answer submitted!</span> Waiting for Host...` : 
-                                'Select your final answer quickly!'}
+                                `<span class="text-green-400 font-bold"><i class="fas fa-check-circle mr-2"></i>Answer Locked In!</span>` : 
+                                'Choose your answer!'}
                         </p>
                     </div>
                 </div>
@@ -839,63 +818,50 @@
             const currentQ = gameState.questions[questionIndex];
             const correctKey = gameState.correctAnswer;
             const playerAnswer = userData?.lastAnswer;
-            const answeredKey = playerAnswer?.questionIndex === questionIndex ? playerAnswer.answer : null;
-            const isCorrect = answeredKey === correctKey;
+            const isAnsweredCorrectly = playerAnswer?.questionIndex === questionIndex && playerAnswer?.answer === correctKey;
             const points = playerAnswer?.pointsAwarded || 0;
+            const answeredKey = playerAnswer?.answer;
 
+            const feedbackTitle = isAnsweredCorrectly ? 
+                `<h3 class="text-4xl text-green-400 font-extrabold"><i class="fas fa-bolt mr-2"></i>CORRECT! +${points}</h3>` :
+                `<h3 class="text-4xl text-red-400 font-extrabold"><i class="fas fa-skull-crossbones mr-2"></i>INCORRECT!</h3>`;
+            
+            const optionsMap = { A: 'bg-red-700', B: 'bg-blue-700', C: 'bg-yellow-700', D: 'bg-green-700' };
+            
             const optionsHTML = Object.entries(currentQ.options).map(([key, value]) => {
-                let classes = 'p-4 rounded-xl text-lg font-bold w-full text-left opacity-60';
-                
+                let classes = `${optionsMap[key] || 'bg-gray-700'} p-4 rounded-xl text-xl font-bold w-full text-center opacity-60`;
+                let icon = '';
+
                 if (key === correctKey) {
-                    classes += ' correct bg-green-500 opacity-100 ring-4 ring-green-300';
-                } else if (key === answeredKey && !isCorrect) {
-                    classes += ' incorrect bg-red-500 opacity-100 ring-4 ring-red-300';
-                } else {
-                    classes += ' bg-gray-700';
+                    classes = 'bg-green-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-green-400 opacity-100';
+                    icon = '<i class="fas fa-check ml-2"></i>';
+                } else if (key === answeredKey) {
+                    classes = 'bg-red-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-red-400 opacity-100';
+                    icon = '<i class="fas fa-times ml-2"></i>';
                 }
                 
-                return `
-                    <div class="${classes}">
-                        <span class="inline-block w-6 h-6 text-center ${key === correctKey ? 'bg-white text-green-500' : 'bg-creepy-orange text-black'} rounded-full mr-3">${key}</span>
-                        ${value}
-                        ${key === correctKey ? '<span class="float-right text-xs font-normal bg-white text-green-500 px-2 py-1 rounded-full">CORRECT</span>' : ''}
-                        ${key === answeredKey && !isCorrect ? '<span class="float-right text-xs font-normal bg-white text-red-500 px-2 py-1 rounded-full">YOUR ANSWER</span>' : ''}
-                    </div>
-                `;
+                return `<div class="${classes}">${value}${icon}</div>`;
             }).join('');
-            
-            const feedbackTitle = isCorrect ? 
-                `<h3 class="text-3xl text-green-400 font-extrabold"><i class="fas fa-magic mr-2"></i>CORRECT! +${points} Points!</h3>` :
-                `<h3 class="text-3xl text-red-400 font-extrabold"><i class="fas fa-skull-crossbones mr-2"></i>INCORRECT.</h3>`;
 
             const html = `
                 <div class="card p-6 mt-4 text-center">
-                    <p class="text-sm text-creepy-purple mb-1 font-semibold">Question ${questionIndex + 1} of ${gameState.totalQuestions}</p>
-                    <h2 class="text-3xl sm:text-4xl font-extrabold mb-6">${currentQ.question}</h2>
+                    <h2 class="text-4xl font-extrabold mb-4 text-gray-200">${currentQ.question}</h2>
                     
-                    <div class="mb-8 p-4 rounded-xl shadow-inner ${isCorrect ? 'bg-green-900/40' : 'bg-red-900/40'}">
+                    <div class="mb-6 p-4 rounded-xl shadow-inner ${isAnsweredCorrectly ? 'bg-green-900/40' : 'bg-red-900/40'}">
                         ${feedbackTitle}
-                        <p class="text-lg mt-2">Your current score: <span class="font-bold text-creepy-orange">${userData?.score || 0}</span></p>
+                        <p class="text-xl mt-2">Total Score: <span class="font-bold text-creepy-orange">${userData?.score || 0}</span></p>
                     </div>
 
                     <div id="answer-options" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         ${optionsHTML}
                     </div>
                     
-                    <p class="mt-6 text-lg text-gray-400">Waiting for the Host to proceed...</p>
-                    
-                    ${gameState.hostId === userId ? `
-                        <button onclick="nextQuestion()" 
-                            class="w-full p-4 mt-6 bg-creepy-orange hover:bg-opacity-90 text-white font-extrabold rounded-lg text-xl btn-game">
-                            ${questionIndex < gameState.totalQuestions - 1 ? 'NEXT QUESTION' : 'END GAME / FINAL SCOREBOARD'}
-                        </button>
-                    ` : ''}
+                    <p class="mt-6 text-xl text-gray-400 animate-pulse">Waiting for the Host to proceed...</p>
                 </div>
             `;
             gameContent.innerHTML = html;
-            window.nextQuestion = nextQuestion;
         }
-        
+
         function renderScoreboardPlayer() {
              const sortedPlayers = Object.values(gameState.players).sort((a, b) => b.score - a.score);
              const isFinal = gameState.status === 'finished';
@@ -909,9 +875,9 @@
                  const highlightClass = p.id === userId ? 'ring-4 ring-creepy-orange bg-gray-600/50' : 'bg-gray-700/50';
 
                  return `
-                    <li class="flex justify-between items-center p-4 rounded-xl my-2 shadow-xl ${highlightClass}">
+                    <li class="flex justify-between items-center p-4 rounded-xl my-2 shadow-xl ${highlightClass} transition duration-300 transform hover:scale-[1.01]">
                         <div class="flex items-center space-x-3">
-                            <span class="text-2xl font-black w-8 text-center">${index + 1}</span>
+                            <span class="text-2xl font-black w-8 text-center text-gray-300">${index + 1}</span>
                             <span class="text-3xl mr-2" style="color:${p.color};">${medalIcon}</span>
                             <span class="text-xl font-bold" style="color:${p.color};">${p.name}</span>
                         </div>
@@ -922,73 +888,149 @@
              
             const html = `
                 <div class="card p-8 w-full max-w-xl mx-auto mt-4 text-center">
-                    <h2 class="text-5xl ${isFinal ? 'text-creepy-orange' : 'text-creepy-purple'} mb-4">${isFinal ? 'Final Scoreboard' : 'Current Scores'}</h2>
+                    <h2 class="text-5xl ${isFinal ? 'text-creepy-orange' : 'text-creepy-purple'} mb-4">${isFinal ? 'Final Scoreboard' : 'Leaderboard'}</h2>
                     ${isFinal && sortedPlayers.length > 0 ? 
                         `<p class="text-2xl text-yellow-500 font-extrabold mb-6">🏆 ${sortedPlayers[0].name} Wins! 🏆</p>` : ''}
                     
                     <ul class="text-left max-h-[80vh] overflow-y-auto">
-                        ${playerRankings || '<li class="text-center text-gray-500 p-4">No players to score yet.</li>'}
+                        ${playerRankings || '<li class="text-center text-gray-500 p-4">Waiting for scores...</li>'}
                     </ul>
                     
-                    ${gameState.hostId === userId && gameState.status === 'finished' ? `
-                        <p class="mt-8 text-sm text-gray-400">The game is over. To start a new game, refresh the page to re-initialize the data.</p>
-                    ` : ''}
+                    <p class="mt-8 text-lg text-gray-400 animate-pulse">Waiting for Host to continue...</p>
                 </div>
             `;
             gameContent.innerHTML = html;
         }
+
+
+        // --- TV VIEW RENDERING ---
+
+        function renderTVView(view) {
+            // Check if user is the Host
+            const isHost = gameState.hostId === userId;
+            startHostLoop(); // Ensure the host loop is running if applicable
+
+            switch (view) {
+                case 'lobby':
+                case 'finished':
+                    renderLobbyOrFinalTV(view);
+                    break;
+                case 'question':
+                case 'reveal':
+                case 'intermission':
+                    renderGameScreenTV(view);
+                    break;
+                default:
+                    gameContent.innerHTML = `<div class="card p-6 text-center text-2xl">Initializing Host and Game...</div>`;
+            }
+        }
         
-        // --- TV Rendering Functions ---
+        function getHostControls(isHost) {
+            if (!isHost) return '';
 
-        function renderLobbyTV() {
+            const pauseBtn = gameState.isPaused ? 
+                `<button onclick="window.togglePause(false)" class="bg-green-500 hover:bg-green-600 text-white p-3 rounded-xl font-bold transition-all btn-host shadow-green-700/50">
+                    <i class="fas fa-play mr-2"></i> RESUME GAME
+                </button>` :
+                `<button onclick="window.togglePause(true)" class="bg-yellow-500 hover:bg-yellow-600 text-black p-3 rounded-xl font-bold transition-all btn-host shadow-yellow-700/50">
+                    <i class="fas fa-pause mr-2"></i> PAUSE GAME
+                </button>`;
+
+            const deleteBtn = `<button onclick="window.deleteGame()" class="bg-red-500 hover:bg-red-600 text-white p-3 rounded-xl font-bold transition-all btn-host shadow-red-700/50">
+                <i class="fas fa-trash mr-2"></i> DELETE GAME
+            </button>`;
+
+            return `
+                <div class="mt-6 p-4 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-2">HOST CONTROLS</h3>
+                    <div class="flex flex-wrap gap-3">
+                        ${pauseBtn}
+                        ${deleteBtn}
+                    </div>
+                    ${gameState.isPaused ? '<p class="text-sm text-yellow-400 mt-2">Game is paused. Automated transitions are halted.</p>' : ''}
+                </div>
+            `;
+        }
+
+        function renderLobbyOrFinalTV(view) {
+            const isHost = gameState.hostId === userId;
             const playerCount = Object.keys(gameState.players).length;
-            const playersList = Object.values(gameState.players)
-                .map(p => `
-                    <li class="p-3 text-lg font-semibold rounded-lg bg-gray-700/50 my-1 shadow" style="color:${p.color};">
-                        ${p.name}
-                    </li>
-                `).join('');
-                
+            const sortedPlayers = Object.values(gameState.players).sort((a, b) => b.score - a.score);
+            const isFinal = view === 'finished';
             const appUrl = window.location.origin + window.location.pathname;
+            
+            let mainContent = '';
 
-            const html = `
-                <div class="card p-10 w-full mx-auto mt-4 text-center">
+            if (isFinal) {
+                mainContent = `
+                    <h2 class="text-7xl text-creepy-orange mb-4">FINAL RESULTS</h2>
+                    <p class="text-3xl text-yellow-500 font-extrabold mb-8">🏆 ${sortedPlayers[0]?.name || 'No One'} Wins! 🏆</p>
+                    <ul class="text-left max-h-[40vh] overflow-y-auto w-full space-y-3">
+                        ${sortedPlayers.slice(0, 10).map((p, index) => `
+                            <li class="flex justify-between items-center p-4 rounded-xl bg-gray-700/50">
+                                <span class="text-3xl font-black w-10 text-creepy-orange">${index + 1}</span>
+                                <span class="text-3xl font-bold flex-grow" style="color:${p.color};">${p.name}</span>
+                                <span class="text-4xl font-extrabold text-creepy-orange">${p.score}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                    <div class="mt-10">
+                        ${isHost ? `<p class="text-xl text-gray-400">Press DELETE GAME to clear data and start a new lobby.</p>` : ''}
+                    </div>
+                `;
+            } else { // Lobby
+                const playersList = Object.values(gameState.players)
+                    .map(p => `<li class="p-2 text-xl font-semibold rounded-lg bg-gray-700/50 my-1 shadow" style="color:${p.color};">${p.name}</li>`)
+                    .join('');
+
+                mainContent = `
                     <h2 class="text-6xl text-creepy-orange mb-6">Join the Game!</h2>
-                    
-                    <!-- Placeholder for QR Code (Requires external service or manual generation) -->
                     <div class="bg-white p-4 inline-block rounded-xl shadow-2xl">
                         <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(appUrl)}" alt="QR Code" class="w-48 h-48"/>
                     </div>
-                    
                     <p class="mt-4 text-xl text-gray-300 font-semibold">
                         Go to: <span class="text-creepy-purple font-mono">${appUrl}</span>
                     </p>
-                    
-                    <h3 class="text-3xl text-creepy-purple font-bold mt-8 mb-4">Players Joined (${playerCount}):</h3>
+                    <h3 class="text-3xl text-creepy-purple font-bold mt-8 mb-4">${playerCount} Players Ready!</h3>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto">
                         ${playersList || '<div class="col-span-4 text-gray-500 p-4">No players yet. Scan the code to join!</div>'}
                     </div>
+                    ${isHost ? `
+                        <button onclick="window.startGame()" 
+                            class="w-full p-4 mt-8 bg-green-500 hover:bg-green-600 text-white font-extrabold rounded-lg text-3xl btn-game shadow-green-700/50">
+                            <i class="fas fa-bomb mr-3"></i> START TRIVIA!
+                        </button>
+                    ` : '<p class="mt-6 text-xl animate-pulse">Waiting for the Host to start...</p>'}
+                `;
+            }
+
+            const html = `
+                <div class="card p-10 w-full mx-auto mt-4 text-center">
+                    ${mainContent}
+                    ${getHostControls(isHost)}
                 </div>
             `;
             gameContent.innerHTML = html;
+            window.startGame = startGame;
+            window.deleteGame = deleteGame;
         }
 
-        function renderGameTV() {
+        function renderGameScreenTV(view) {
+            const isHost = gameState.hostId === userId;
             const questionIndex = gameState.currentQuestion;
             const currentQ = gameState.questions[questionIndex];
-            const isScoring = gameState.status === 'scoring';
-            const isFinished = gameState.status === 'finished';
-            const correctKey = gameState.correctAnswer;
+            const isReveal = view === 'reveal';
+            const isIntermission = view === 'intermission';
             
-            if (isFinished || gameState.showScoreboard) {
-                renderScoreboardTV();
+            if (isIntermission) {
+                renderScoreboardTV(isHost);
                 return;
             }
 
-            if (!currentQ) {
-                 gameContent.innerHTML = `<div class="card p-6 text-center text-xl text-red-500">Error: Question not found.</div>`;
-                 return;
-            }
+            if (!currentQ) return;
+
+            const timeRemaining = isReveal ? 0 : Math.max(0, QUESTION_TIME_SECONDS - Math.floor((Date.now() - gameState.questionStartTime) / 1000));
+            const timerPercent = isReveal ? 0 : (timeRemaining / QUESTION_TIME_SECONDS) * 100;
             
             // Player Answer Tally
             const answerTally = { 'A': 0, 'B': 0, 'C': 0, 'D': 0 };
@@ -1000,88 +1042,86 @@
                 }
             });
             const playerCount = Object.keys(gameState.players).length;
+            const totalWidth = isReveal ? totalAnswered : playerCount;
 
-            const timerDisplay = isScoring ? 
-                `<span class="text-3xl text-creepy-orange"><i class="fas fa-check-circle"></i> ANSWER REVEALED</span>` : 
-                `<span class="text-6xl font-extrabold text-creepy-orange">${gameState.timer}</span>`;
+            const optionsMap = { A: 'bg-red-700', B: 'bg-blue-700', C: 'bg-yellow-700', D: 'bg-green-700' };
 
             const optionsHTML = Object.entries(currentQ.options).map(([key, value]) => {
-                const isCorrect = isScoring && key === correctKey;
-                const backgroundColor = isCorrect ? 'bg-green-600' : 'bg-gray-700';
-                const ringClass = isCorrect ? 'ring-4 ring-green-400' : '';
-                const tallyCount = isScoring ? answerTally[key] : '';
-                const tallyPercent = isScoring ? (tallyCount / totalAnswered * 100).toFixed(0) : '';
+                const isCorrect = isReveal && key === gameState.correctAnswer;
+                const backgroundColor = optionsMap[key] || 'bg-gray-700';
+                const tallyCount = answerTally[key] || 0;
+                const barWidth = totalWidth > 0 ? (tallyCount / totalWidth) * 100 : 0;
+                const revealClass = isReveal ? 'tv-option-reveal ' + (isCorrect ? 'correct-answer' : '') : '';
 
                 return `
-                    <div class="p-6 rounded-xl text-lg font-bold w-full text-left transition-colors duration-300 ${backgroundColor} ${ringClass}">
-                        <div class="flex justify-between items-center mb-1">
-                             <span class="inline-block w-8 h-8 text-center bg-creepy-orange text-black rounded-full mr-3 text-xl font-black">${key}</span>
-                             <span class="text-lg font-semibold flex-grow">${value}</span>
+                    <div class="${backgroundColor} p-4 rounded-xl text-lg font-bold w-full text-center shadow-lg relative overflow-hidden ${revealClass}">
+                        <div class="absolute inset-0 bg-white/20 transition-all duration-500" style="width: ${isReveal ? barWidth : 0}%"></div>
+                        <div class="relative z-10 flex flex-col items-center">
+                            <span class="inline-block w-8 h-8 text-center bg-white text-black rounded-full text-xl font-black mb-2">${key}</span>
+                            <span class="text-2xl">${value}</span>
+                            ${isReveal ? `
+                                <div class="mt-3 text-3xl font-black text-creepy-orange">
+                                    ${tallyCount} <span class="text-sm text-gray-300">VOTES</span>
+                                </div>
+                            ` : ''}
                         </div>
-                        ${isScoring ? `
-                            <div class="mt-3 text-center">
-                                <span class="text-2xl font-black text-white">${tallyCount}</span>
-                                <span class="text-sm text-gray-300 ml-1">PLAYERS (${tallyPercent}%)</span>
-                                ${isCorrect ? '<i class="fas fa-crown text-yellow-500 ml-2"></i>' : ''}
-                            </div>
-                        ` : ''}
                     </div>
                 `;
             }).join('');
-            
-            const hostControls = gameState.hostId === userId ? `
-                <div class="mt-8">
-                    <button onclick="${isScoring ? 'toggleScoreboard()' : 'revealAnswer()'}" 
-                        class="w-full p-4 bg-creepy-purple hover:bg-opacity-90 text-white font-extrabold rounded-lg text-xl btn-game shadow-creepy-orange">
-                        ${isScoring ? 'SHOW SCOREBOARD' : 'REVEAL ANSWER & SCORE'}
-                    </button>
-                    ${isScoring ? `
-                        <button onclick="nextQuestion()" 
-                            class="w-full p-4 mt-3 bg-creepy-orange hover:bg-opacity-90 text-white font-extrabold rounded-lg text-xl btn-game shadow-creepy-purple">
-                            ${questionIndex < gameState.totalQuestions - 1 ? 'NEXT QUESTION' : 'END GAME / FINAL SCOREBOARD'}
-                        </button>
-                    ` : ''}
-                </div>
-            ` : '';
+
+            const timerDisplay = isReveal ? 
+                `<span class="text-4xl text-green-400 font-extrabold"><i class="fas fa-check-circle"></i> ANSWER REVEALED!</span>` : 
+                `<span class="text-6xl font-extrabold text-creepy-orange">${timeRemaining}</span>`;
 
             const html = `
                 <div class="card p-10 mt-4">
-                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-700">
-                        <p class="text-2xl text-creepy-purple font-extrabold">Q${questionIndex + 1} / ${gameState.totalQuestions}</p>
+                    <!-- Top Bar -->
+                    <div class="flex justify-between items-center mb-6 pb-2 border-b-4 border-creepy-purple">
+                        <p class="text-3xl text-creepy-purple font-extrabold">Q${questionIndex + 1} / ${gameState.totalQuestions}</p>
                         ${timerDisplay}
+                        <p class="text-3xl text-gray-400 font-extrabold">${currentQ.category}</p>
                     </div>
+
+                    <!-- Timer Bar -->
+                    ${!isReveal ? `<div id="timer-bar-container" class="mb-6"><div id="timer-bar" style="width: ${timerPercent}%;"></div></div>` : ''}
                     
-                    <h2 class="text-4xl sm:text-5xl font-extrabold mb-8 text-center">${currentQ.question}</h2>
+                    <h2 class="text-5xl font-extrabold mb-10 text-center">${currentQ.question}</h2>
                     
+                    <!-- Answers Grid -->
                     <div id="answer-options" class="grid grid-cols-2 gap-6">
                         ${optionsHTML}
                     </div>
                     
-                    <div class="mt-6 text-center text-xl text-gray-400">
-                        Players Answered: <span class="text-creepy-orange font-bold">${totalAnswered}/${playerCount}</span>
+                    <!-- Status/Host Info -->
+                    <div class="mt-8 text-center text-2xl text-gray-400">
+                        ${isReveal ? 
+                            `Next Intermission in: ${Math.max(0, Math.ceil((gameState.transitionTimeEnd - Date.now()) / 1000))}s` :
+                            `Players Answered: <span class="text-creepy-orange font-bold">${totalAnswered}/${playerCount}</span>`
+                        }
                     </div>
 
-                    ${hostControls}
+                    ${getHostControls(isHost)}
                 </div>
             `;
             gameContent.innerHTML = html;
-            window.revealAnswer = revealAnswer;
-            window.nextQuestion = nextQuestion;
-            window.toggleScoreboard = toggleScoreboard;
         }
 
-        function renderScoreboardTV() {
+        function renderScoreboardTV(isHost) {
              const sortedPlayers = Object.values(gameState.players).sort((a, b) => b.score - a.score);
              const isFinal = gameState.status === 'finished';
+             const isIntermission = gameState.status === 'intermission';
+             
+             let countdown = 0;
+             if (isIntermission) {
+                countdown = Math.max(0, Math.ceil((gameState.transitionTimeEnd - Date.now()) / 1000));
+             }
 
              const playerRankings = sortedPlayers.map((p, index) => {
                  let medalIcon = '';
                  if (index === 0) medalIcon = '<i class="fas fa-crown text-yellow-500"></i>';
-                 if (index === 1) medalIcon = '<i class="fas fa-medal text-gray-400"></i>';
-                 if (index === 2) medalIcon = '<i class="fas fa-medal text-yellow-700"></i>';
 
                  return `
-                    <li class="flex justify-between items-center p-5 rounded-xl my-2 shadow-2xl bg-gray-700/50 hover:scale-[1.01] transition-transform duration-100">
+                    <li class="flex justify-between items-center p-5 rounded-xl my-2 shadow-2xl bg-gray-700/50 hover:scale-[1.01] transition-transform duration-300">
                         <div class="flex items-center space-x-4">
                             <span class="text-4xl font-black w-10 text-creepy-orange text-center">${index + 1}</span>
                             <span class="text-4xl" style="color:${p.color};">${medalIcon}</span>
@@ -1092,40 +1132,29 @@
                  `;
              }).join('');
              
-            const hostControls = gameState.hostId === userId && !isFinal ? `
-                <div class="mt-8">
-                    <button onclick="toggleScoreboard()" 
-                        class="w-full p-4 bg-creepy-purple hover:bg-opacity-90 text-white font-extrabold rounded-lg text-xl btn-game shadow-creepy-orange">
-                        HIDE SCOREBOARD / BACK TO QUESTION
-                    </button>
-                    <button onclick="nextQuestion()" 
-                        class="w-full p-4 mt-3 bg-creepy-orange hover:bg-opacity-90 text-white font-extrabold rounded-lg text-xl btn-game shadow-creepy-purple">
-                        ${gameState.currentQuestion < gameState.totalQuestions - 1 ? 'NEXT QUESTION' : 'END GAME / FINAL SCOREBOARD'}
-                    </button>
-                </div>
-            ` : '';
-            
             const html = `
                 <div class="card p-10 w-full mx-auto mt-4 text-center">
                     <h2 class="text-7xl ${isFinal ? 'text-creepy-orange' : 'text-creepy-purple'} mb-4">${isFinal ? 'FINAL SCOREBOARD' : 'LEADERBOARD'}</h2>
+                    
                     ${isFinal && sortedPlayers.length > 0 ? 
                         `<p class="text-3xl text-yellow-500 font-extrabold mb-8">🏆 THE WINNER IS ${sortedPlayers[0].name.toUpperCase()}! 🏆</p>` : ''}
                     
-                    <ul class="text-left max-h-[70vh] overflow-y-auto">
+                    <ul class="text-left max-h-[60vh] overflow-y-auto">
                         ${playerRankings || '<li class="text-center text-gray-500 p-4">No scores to display.</li>'}
                     </ul>
                     
-                    ${hostControls}
+                    ${isIntermission ? `
+                        <p class="text-3xl text-green-400 font-extrabold mt-8 animate-pulse">Next Question in... ${countdown}s</p>
+                    ` : ''}
+
+                    ${getHostControls(isHost)}
                 </div>
             `;
             gameContent.innerHTML = html;
-            window.toggleScoreboard = toggleScoreboard;
-            window.nextQuestion = nextQuestion;
         }
 
-
         // =========================================================================
-        // --- Firebase Listeners and Setup ---
+        // --- Firebase Listeners and Authentication ---
         // =========================================================================
 
         function setupListeners() {
@@ -1134,21 +1163,13 @@
             onSnapshot(gameDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     gameState = { ...gameState, ...docSnap.data() };
-                    // Handle Host Assignment if needed (first joiner if hostId is null)
-                    if (gameState.hostId === null && userId) {
-                         // Only the first player to join will execute this (handled by transaction)
-                        updateDoc(gameDocRef, { hostId: userId, lastUpdateTime: Date.now() })
-                            .catch(e => console.log("Host already set or initial update error:", e));
-                    }
-                } else {
-                    // Game doc does not exist, initialize it (only possible if user is authenticated)
-                    if (userId) {
-                        initializeGameData().catch(e => console.error("Failed to initialize game:", e));
-                    }
+                } else if (userId && isTVMode) {
+                    // Only TV mode tries to initialize the game if it's missing
+                    initializeGameData().catch(e => console.error("Failed to initialize game:", e));
                 }
             });
             
-            // 2. All Players Listener (for host and TV mode)
+            // 2. All Players Listener (Includes current user's profile)
             const playersColRef = collection(db, PLAYERS_COLLECTION);
             onSnapshot(playersColRef, (snapshot) => {
                 const newPlayers = {};
@@ -1162,83 +1183,53 @@
                 });
                 gameState.players = newPlayers;
                 userData = currentUserData;
-
-                // Re-render UI after any data change
-                render();
+                render(); // Re-render UI after any data change
             });
-
-            // 3. Timer Updater (Client-side, only for question phase)
-            setInterval(() => {
-                if (gameState.status === 'in_progress' && gameState.questionStartTime > 0) {
-                    const elapsed = Date.now() - gameState.questionStartTime;
-                    const remainingSeconds = Math.max(0, 15 - Math.floor(elapsed / 1000));
-                    
-                    if (gameState.timer !== remainingSeconds) {
-                        gameState.timer = remainingSeconds;
-                        // Force a partial re-render only for the timer display if needed (or full render)
-                        if (isTVMode) {
-                            render(); // Re-render the TV view to update timer
-                        }
-                    }
-
-                    // Host-side check: if time is up, trigger revealAnswer
-                    if (gameState.timer === 0 && gameState.hostId === userId && gameState.status === 'in_progress') {
-                        revealAnswer();
-                    }
-                }
-            }, 500);
+            
+            // 3. Client-side timer update for immediate UI feedback (non-host)
+            if (!isTVMode) {
+                setInterval(render, 1000); 
+            }
         }
 
         async function initializeAppAndAuth() {
-            // 1. Check Config
-            if (!firebaseConfig) {
-                gameContent.innerHTML = `<div class="card p-6 text-center text-xl text-red-500">
-                    <h2 class="text-3xl text-creepy-orange mb-4">Configuration Error</h2>
-                    <p>Firebase is not configured. This app cannot run.</p>
-                </div>`;
+            if (!firebaseConfig.projectId) {
+                showMessage("Firebase config missing.", true);
                 return;
             }
 
-            // 2. Initialize Firebase
             try {
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
             } catch (e) {
                 console.error("Firebase Initialization Error:", e);
-                 gameContent.innerHTML = `<div class="card p-6 text-center text-xl text-red-500">
-                    <h2 class="text-3xl text-creepy-orange mb-4">Firebase Error</h2>
-                    <p>Could not initialize Firebase services.</p>
-                </div>`;
                 return;
             }
 
-            // 3. Authenticate User
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
-                    setupListeners(); // Start listening for data
+                    setupListeners(); 
                 } else {
-                    // Sign in anonymously if no user is found
                     try {
-                        // Use the initial auth token if provided by the environment, otherwise sign in anonymously
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
                              await signInAnonymously(auth);
                         }
                     } catch (error) {
-                        console.error("Anonymous Sign-in Failed:", error);
-                        userId = generateTemporaryId(); // Fallback ID if auth fails
-                        setupListeners();
+                        console.error("Authentication Failed:", error);
+                        // If auth fails, we can't play multiplayer
+                        showMessage("Failed to sign in. Live features disabled.", true);
                     }
                 }
             });
         }
 
-        // Start the application
         window.onload = initializeAppAndAuth;
-
+        window.togglePause = togglePause;
+        window.deleteGame = deleteGame; // Expose delete for host button
     </script>
 </body>
 </html>

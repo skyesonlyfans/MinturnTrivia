@@ -123,19 +123,10 @@
     </div>
 
     <!-- Firebase Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, query, runTransaction, updateDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // NOTE: setLogLevel('Debug') is commented out but can be used for advanced debugging
-        // import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // setLogLevel('Debug');
-
-
-        // =========================================================================
-        // --- Firebase Config and Initialization ---
-        // Replace with your actual Firebase config or ensure it's provided by the environment
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot, collection, query, runTransaction, updateDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 const firebaseConfig = {
   apiKey: "AIzaSyD2qmDEWrqKERcEQf36THyzYb3ip8TLQf4",
   authDomain: "minturntrivia.firebaseapp.com",
@@ -1239,4 +1230,5 @@ const firebaseConfig = {
     </script>
 </body>
 </html>
+
 

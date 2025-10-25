@@ -101,7 +101,7 @@
             height: 100%;
             background-color: #ff6600;
             width: 100%;
-            transition: width 1s linear;
+            transition: width 0.1s linear; /* Make transition fast for smooth updates */
             animation: pulseTimer 1.5s infinite ease-in-out;
         }
         @keyframes pulseTimer {
@@ -119,8 +119,8 @@
             Minturn Halloween Trivia
         </h1>
         <div class="card p-10 w-full max-w-md">
-            <h2 class="text-4xl text-white mb-8">Choose Your Path</h2>
-            <div class="space-y-6">
+            <!-- <h2 class="text-4xl text-white mb-8">Choose Your Path</h2> --> <!-- Removed as requested -->
+            <div class="space-y-6 mt-8">
                 <button id="btn-join-game" class="w-full p-5 bg-creepy-orange text-white font-extrabold rounded-lg text-3xl btn-menu">
                     <i class="fas fa-ghost mr-3"></i> Join Game
                 </button>
@@ -185,7 +185,7 @@
         const PLAYERS_COLLECTION = `artifacts/${appId}/public/data/players`;
         const GAME_DOC_ID = 'main-game';
         
-        const QUESTION_TIME_SECONDS = 15;
+        const QUESTION_TIME_SECONDS = 20; // Changed to 20 seconds
         const INTERMISSION_TIME_SECONDS = 10;
         
         let gameState = {
@@ -769,7 +769,7 @@
                     <h2 class="text-3xl text-creepy-orange mb-6 text-center">Join the Fray</h2>
                     <form id="join-form" class="space-y-4">
                         <div>
-                            <label for="player-name" class="block text-sm font-semibold mb-1">Your Spooky Nickname:</label>
+                            <label for="player-name" class="block text-sm font-semibold mb-1">Nickname:</label>
                             <input type="text" id="player-name" placeholder="Enter your name" required maxlength="15"
                                 class="w-full p-3 rounded bg-gray-700 text-white border border-gray-600 focus:border-creepy-orange focus:ring-1 focus:ring-creepy-orange">
                         </div>
@@ -1091,8 +1091,10 @@
             const currentQ = gameState.questions[questionIndex];
             const isReveal = view === 'reveal';
 
-            const timeRemaining = isReveal ? 0 : Math.max(0, QUESTION_TIME_SECONDS - Math.floor((Date.now() - gameState.questionStartTime) / 1000));
-            const timerPercent = isReveal ? 0 : (timeRemaining / QUESTION_TIME_SECONDS) * 100;
+            // Calculate initial time for render
+            const timeElapsed = Date.now() - gameState.questionStartTime;
+            const timeRemaining = isReveal ? 0 : Math.max(0, QUESTION_TIME_SECONDS - Math.floor(timeElapsed / 1000));
+            const timerPercent = isReveal ? 0 : Math.max(0, 100 - (timeElapsed / (QUESTION_TIME_SECONDS * 1000)) * 100);
             
             // Tally answers
             const answerTally = { 'A': 0, 'B': 0, 'C': 0, 'D': 0 };
@@ -1133,7 +1135,7 @@
 
             const timerDisplay = isReveal ? 
                 `<span class="text-4xl text-green-400 font-extrabold"><i class="fas fa-check-circle"></i> ANSWER REVEALED!</span>` : 
-                `<span class="text-6xl font-extrabold text-creepy-orange">${timeRemaining}</span>`;
+                `<span id="tv-timer-text" class="text-6xl font-extrabold text-creepy-orange">${timeRemaining}</span>`;
 
             const html = `
                 <div class="card p-10 mt-4">
@@ -1216,7 +1218,16 @@
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             onSnapshot(gameDocRef, (docSnap) => {
                 if (docSnap.exists()) {
+                    const oldStatus = gameState.status;
                     gameState = { ...gameState, ...docSnap.data() };
+                    
+                    // If we just entered a new question state, play TTS
+                    if(oldStatus !== 'question' && gameState.status === 'question' && isTVMode) {
+                        const qIndex = gameState.currentQuestion;
+                        if(qIndex >= 0 && gameState.questions[qIndex]) {
+                            playTTS(`Question ${qIndex + 1}. ${gameState.questions[qIndex].question}`);
+                        }
+                    }
                 } else if (userId && isTVMode) {
                     // If doc is deleted (e.g., by host) and this is the host, re-initialize
                     initializeGameData().catch(e => console.error("Failed to re-initialize game:", e));
@@ -1255,6 +1266,24 @@
             } catch (e) {
                 console.error("Firebase Initialization Error:", e);
                 return;
+            }
+
+            // Smooth timer interval for TV mode
+            if (isTVMode) {
+                setInterval(() => {
+                    if (gameState.status === 'question' && !gameState.isPaused) {
+                        const timerText = document.getElementById('tv-timer-text');
+                        const timerBar = document.getElementById('timer-bar');
+                        if (timerText && timerBar) {
+                            const timeElapsed = Date.now() - gameState.questionStartTime;
+                            const timeRemaining = Math.max(0, QUESTION_TIME_SECONDS - Math.floor(timeElapsed / 1000));
+                            const timerPercent = Math.max(0, 100 - (timeElapsed / (QUESTION_TIME_SECONDS * 1000)) * 100);
+                            
+                            timerText.textContent = timeRemaining;
+                            timerBar.style.width = `${timerPercent}%`;
+                        }
+                    }
+                }, 100); // Update 10 times a second
             }
 
             onAuthStateChanged(auth, async (user) => {

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Halloween Trivia Showdown</title>
+    <title>Minturn Halloween Trivia</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://kit.fontawesome.com/a57004f25b.js" crossorigin="anonymous"></script>
     <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -20,7 +20,7 @@
             color: var(--text-color);
             min-height: 100vh;
         }
-        h1, h2 {
+        h1, h2, h3 {
             font-family: 'Creepster', cursive;
         }
         .text-creepy-orange { color: var(--primary-color); }
@@ -36,15 +36,15 @@
             border: 2px solid var(--primary-color);
         }
 
-        .btn-game, .btn-host {
+        .btn-menu, .btn-game, .btn-host {
             transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             box-shadow: 0 4px 0 var(--secondary-color);
         }
-        .btn-game:hover, .btn-host:hover {
+        .btn-menu:hover, .btn-game:hover, .btn-host:hover {
             box-shadow: 0 6px 0 var(--secondary-color);
             transform: translateY(-2px);
         }
-        .btn-game:active, .btn-host:active {
+        .btn-menu:active, .btn-game:active, .btn-host:active {
             box-shadow: 0 0 0 var(--secondary-color);
             transform: translateY(4px);
         }
@@ -92,42 +92,73 @@
 </head>
 <body>
 
-    <div id="app" class="flex flex-col items-center p-4 sm:p-8">
-        <h1 class="text-6xl sm:text-7xl font-bold mb-4 text-creepy-orange tracking-widest text-center">
-            Halloween Trivia
+    <div id="view-main-menu" class="flex flex-col items-center justify-center min-h-screen p-8 text-center">
+        <h3 class="text-2xl text-creepy-purple mb-4">Presented by Skye &lt;3</h3>
+        <h1 class="text-7xl sm:text-8xl font-bold mb-12 text-creepy-orange tracking-widest">
+            Minturn Halloween Trivia
         </h1>
-
-        <div id="game-content" class="w-full max-w-6xl">
-            <div id="loading-state" class="card p-6 text-center">
-                <i class="fas fa-ghost fa-spin text-4xl text-creepy-orange mb-4"></i>
-                <p class="text-xl">Checking in...</p>
+        <div class="card p-10 w-full max-w-md">
+            <h2 class="text-4xl text-white mb-8">Choose Your Path</h2>
+            <div class="space-y-6">
+                <button id="btn-join-game" class="w-full p-5 bg-creepy-orange text-white font-extrabold rounded-lg text-3xl btn-menu">
+                    <i class="fas fa-ghost mr-3"></i> Join Game
+                </button>
+                <button id="btn-host-game" class="w-full p-5 bg-creepy-purple text-white font-extrabold rounded-lg text-3xl btn-menu">
+                    <i class="fas fa-tv mr-3"></i> Host / Display
+                </button>
             </div>
         </div>
+    </div>
 
-        <div id="message-box" class="fixed bottom-4 left-1/2 -translate-x-1/2 card p-3 opacity-0 transition-opacity duration-300 pointer-events-none z-50">
-            <p id="message-text" class="text-sm"></p>
+    <div id="view-game-wrapper" class="hidden w-full">
+        <div id="app" class="flex flex-col items-center p-4 sm:p-8">
+            <h1 class="text-6xl sm:text-7xl font-bold mb-4 text-creepy-orange tracking-widest text-center">
+                Halloween Trivia
+            </h1>
+
+            <div id="game-content" class="w-full max-w-6xl">
+                <div id="loading-state" class="card p-6 text-center">
+                    <i class="fas fa-ghost fa-spin text-4xl text-creepy-orange mb-4"></i>
+                    <p class="text-xl">Checking in...</p>
+                </div>
+            </div>
+
+            <div id="message-box" class="fixed bottom-4 left-1/2 -translate-x-1/2 card p-3 opacity-0 transition-opacity duration-300 pointer-events-none z-50">
+                <p id="message-text" class="text-sm"></p>
+            </div>
+            
+            <button id="leave-game-btn" class="hidden fixed top-4 right-4 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-full transition duration-150 shadow-lg text-xs z-50">
+                <i class="fas fa-sign-out-alt mr-2"></i>Leave Game
+            </button>
         </div>
-
-        <button id="tv-mode-btn" class="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-full transition duration-150 shadow-lg text-xs z-50">
-            TV Display Mode
-        </button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, query, runTransaction, updateDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { };
+        setLogLevel('Debug');
         
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trivia-app';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
-
+        const firebaseConfig = {
+          apiKey: "AIzaSyD2qmDEWrqKERcEQf36THyzYb3ip8TLQf4",
+          authDomain: "minturntrivia.firebaseapp.com",
+          projectId: "minturntrivia",
+          storageBucket: "minturntrivia.firebasestorage.app",
+          messagingSenderId: "465699900511",
+          appId: "1:465699900511:web:a1b7019bc82a5407881fea",
+          measurementId: "G-VEX4W50GEE"
+        };
+        
+        const appId = 'minturn-trivia-app';
+        
         let app;
         let db;
         let auth;
         let userId;
         let userData;
+        let isTVMode = false;
 
         const APP_COLLECTION = `artifacts/${appId}/public/data/game-state`;
         const PLAYERS_COLLECTION = `artifacts/${appId}/public/data/players`;
@@ -149,6 +180,41 @@
         };
         
         let gameLoopInterval = null;
+        
+        const viewMainMenu = document.getElementById('view-main-menu');
+        const viewGameWrapper = document.getElementById('view-game-wrapper');
+        const btnJoinGame = document.getElementById('btn-join-game');
+        const btnHostGame = document.getElementById('btn-host-game');
+        const leaveGameBtn = document.getElementById('leave-game-btn');
+
+        btnJoinGame.onclick = () => {
+            isTVMode = false;
+            viewMainMenu.classList.add('hidden');
+            viewGameWrapper.classList.remove('hidden');
+            leaveGameBtn.classList.remove('hidden');
+            initializeAppAndAuth();
+        };
+        
+        btnHostGame.onclick = () => {
+            isTVMode = true;
+            viewMainMenu.classList.add('hidden');
+            viewGameWrapper.classList.remove('hidden');
+            initializeAppAndAuth();
+        };
+        
+        leaveGameBtn.onclick = async () => {
+            if (!userId || !db) return;
+            if (confirm("Are you sure you want to leave the game?")) {
+                try {
+                    const playerDocRef = doc(db, PLAYERS_COLLECTION, userId);
+                    await deleteDoc(playerDocRef);
+                } catch (e) {
+                    console.error("Error leaving game:", e);
+                } finally {
+                    window.location.reload();
+                }
+            }
+        };
 
         function showMessage(text, isError = false) {
             const messageBox = document.getElementById('message-box');
@@ -441,17 +507,7 @@
             }
         }
 
-        const isTVMode = window.location.search.includes('view=tv');
         let gameContent = document.getElementById('game-content');
-        let tvModeBtn = document.getElementById('tv-mode-btn');
-
-        if (isTVMode) {
-            tvModeBtn.textContent = 'Player Mode';
-            tvModeBtn.onclick = () => window.location.href = window.location.pathname;
-        } else {
-            tvModeBtn.textContent = 'Host/TV Display Mode';
-            tvModeBtn.onclick = () => window.location.href = window.location.pathname + '?view=tv';
-        }
 
         async function hostGameLoop() {
             if (!db || gameState.hostId !== userId || gameState.isPaused || document.hidden) return;
@@ -612,7 +668,7 @@
         }
         
         function renderJoinForm() {
-            let colors = ['#e91e63', '#9c27b0', '#2196f3', '#009688', '#ff9800', '#f44336'];
+            let colors = ['#e91e63', '#9c27b0', '#ff6600', '#ffffff', '#9e9e9e', '#795548', '#4caf50', '#ffeb3b'];
             let selectedColor = colors[0];
 
             function colorSelectorHTML() {
@@ -627,6 +683,7 @@
                 selectedColor = c;
                 document.querySelectorAll('.color-btn').forEach(btn => {
                     btn.classList.remove('border-white', 'ring-2', 'ring-creepy-orange');
+                    btn.style.borderColor = (c === '#ffffff' || c === '#ffeb3b') ? '#444' : 'transparent';
                     if (btn.dataset.color === c) {
                         btn.classList.add('border-white', 'ring-2', 'ring-creepy-orange');
                     }
@@ -644,7 +701,7 @@
                         </div>
                         <div>
                             <label class="block text-sm font-semibold mb-2">Pick Your Color:</label>
-                            <div class="flex justify-center" id="color-picker-container">
+                            <div class="flex flex-wrap justify-center" id="color-picker-container">
                                 ${colorSelectorHTML()}
                             </div>
                         </div>
@@ -901,7 +958,7 @@
                         <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(appUrl)}" alt="QR Code" class="w-48 h-48"/>
                     </div>
                     <p class="mt-4 text-xl text-gray-300 font-semibold">
-                        Go to: <span class="text-creepy-purple font-mono">${appUrl}</span>
+                        Scan or Go to: <span class="text-creepy-purple font-mono text-lg">${appUrl}</span>
                     </p>
                     <h3 class="text-3xl text-creepy-purple font-bold mt-8 mb-4">${playerCount} Players Ready!</h3>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto">
@@ -1114,11 +1171,7 @@
                     render();
                 } else {
                     try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                             await signInAnonymously(auth);
-                        }
+                         await signInAnonymously(auth);
                     } catch (error) {
                         console.error("Authentication Failed:", error);
                         showMessage("Failed to sign in. Live features disabled.", true);
@@ -1127,9 +1180,12 @@
             });
         }
 
-        window.onload = initializeAppAndAuth;
         window.togglePause = togglePause;
         window.deleteGame = deleteGame;
+        window.startGame = startGame;
+        window.submitAnswer = submitAnswer;
+        window.selectColor = window.selectColor;
     </script>
 </body>
 </html>
+

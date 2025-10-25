@@ -218,6 +218,7 @@
 
         function showMessage(text, isError = false) {
             const messageBox = document.getElementById('message-box');
+            if (!messageBox) return;
             const messageText = document.getElementById('message-text');
 
             messageText.textContent = text;
@@ -340,12 +341,17 @@
         
         async function fetchQuestions() {
             try {
-                const response = await fetch('trivia.json.txt');
-                if (!response.ok) throw new Error("Trivia file not found.");
+                // We use a unique query param to bypass potential browser caching of the file
+                const response = await fetch(`trivia.json.txt?v=${Date.now()}`);
+                if (!response.ok) throw new Error("Trivia file not found or failed to load.");
                 const data = await response.json();
+                if (!Array.isArray(data) || data.length === 0) {
+                     throw new Error("Trivia data is invalid or empty.");
+                }
                 return data;
             } catch (e) {
                 console.error("Failed to load trivia questions:", e);
+                showMessage("Could not load questions. Using fallback.", true);
                 return [
                     { category: "Fallback", question: "What ancient festival is the origin of Halloween?", options: { "A": "Beltane", "B": "Samhain", "C": "Lughnasadh", "D": "Yule" }, answer: "B" },
                     { category: "Fallback", question: "In the film *Halloween*, what mask does Michael Myers wear?", options: { "A": "Clown", "B": "Shatner", "C": "Hockey", "D": "Ghostface" }, answer: "B" },
@@ -356,11 +362,17 @@
         async function initializeGameData() {
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             
-            await updateDoc(gameDocRef, { 
-                hostId: userId 
-            }).catch(async (e) => {
+            try {
+                // Try to set hostId. If doc doesn't exist, this fails and we go to catch.
+                await updateDoc(gameDocRef, { 
+                    hostId: userId 
+                });
+            } catch (e) {
                 if (e.code === 'not-found') {
+                    // Doc doesn't exist, create it as the host
                     const questions = await fetchQuestions();
+                    
+                    // Shuffle questions
                     for (let i = questions.length - 1; i > 0; i--) {
                         const j = Math.floor(Math.random() * (i + 1));
                         [questions[i], questions[j]] = [questions[j], questions[i]];
@@ -370,7 +382,7 @@
                         status: 'lobby',
                         currentQuestion: -1,
                         totalQuestions: questions.length,
-                        questions: questions,
+                        questions: questions, // Storing shuffled questions in Firestore
                         hostId: userId,
                         isPaused: false,
                         questionStartTime: Date.now(),
@@ -380,8 +392,10 @@
                     };
                     await setDoc(gameDocRef, initialData);
                     showMessage("New Game Created!");
+                } else {
+                    console.error("Error checking game data:", e);
                 }
-            });
+            }
         }
         
         async function deleteGame() {
@@ -391,15 +405,23 @@
             }
             if (!confirm('Are you sure you want to delete the entire game and all player data?')) return;
 
+            // Stop the game loop if it's running
+            if (gameLoopInterval) {
+                clearInterval(gameLoopInterval);
+                gameLoopInterval = null;
+            }
+            
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             await deleteDoc(gameDocRef);
             
+            // Delete all player documents
             const playerDocsQuery = query(collection(db, PLAYERS_COLLECTION));
             const playerDocsSnapshot = await getDocs(playerDocsQuery);
-            const deletePromises = playerDocsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+            const deletePromises = playerDocsSnapshot.docs.map(playerDoc => deleteDoc(playerDoc.ref));
             await Promise.all(deletePromises);
             
             showMessage("Game has been completely deleted. Starting fresh...");
+            // Re-initialize game data
             await initializeGameData();
         }
 
@@ -409,6 +431,7 @@
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             await updateDoc(gameDocRef, {
                 isPaused: shouldPause,
+                // Refresh start time on resume to prevent immediate timeout
                 questionStartTime: Date.now(),
                 lastUpdate: Date.now(),
             });
@@ -443,6 +466,12 @@
             
             const timeElapsed = Date.now() - gameState.questionStartTime;
             
+            // Check if already answered this question
+            if (userData.lastAnswer && userData.lastAnswer.questionIndex === gameState.currentQuestion) {
+                 showMessage("You've already answered!", true);
+                 return;
+            }
+            
             if (timeElapsed >= QUESTION_TIME_SECONDS * 1000) {
                  showMessage("Too late! Time is up.", true);
                  return;
@@ -466,6 +495,11 @@
         }
         
         async function calculateAndScore() {
+            if (gameState.currentQuestion < 0 || !gameState.questions[gameState.currentQuestion]) {
+                console.error("Invalid question index for scoring.");
+                return;
+            }
+            
             const currentQ = gameState.questions[gameState.currentQuestion];
             const correctKey = currentQ.answer;
 
@@ -477,12 +511,13 @@
             for (const playerDoc of playerDocsSnapshot.docs) {
                 const playerId = playerDoc.id;
                 const playerDocRef = doc(db, PLAYERS_COLLECTION, playerId);
-                const player = gameState.players[playerId];
+                const player = gameState.players[playerId]; // Get data from our local state
                 const playerAnswer = player?.lastAnswer;
                 
+                // Score only if they answered the *current* question and haven't been scored yet
                 if (playerAnswer && 
                     playerAnswer.questionIndex === gameState.currentQuestion && 
-                    !playerAnswer.pointsAwarded
+                    playerAnswer.pointsAwarded === undefined // Check if 'pointsAwarded' is not set
                     ) {
                     
                     await runTransaction(db, async (transaction) => {
@@ -493,11 +528,14 @@
                         let scoreDelta = 0;
 
                         if (playerAnswer.answer === correctKey) {
+                            // Calculate score based on time
                             const timeTaken = Math.min(playerAnswer.timeTaken, maxTimeMs);
-                            const timeRatio = 1 - (timeTaken / maxTimeMs);
+                            const timeRatio = 1 - (timeTaken / maxTimeMs); // 1.0 (fastest) to 0.0 (slowest)
+                            // Base 500 points + 500 points based on speed
                             scoreDelta = 500 + Math.round(timeRatio * 500); 
                         }
 
+                        // Update the lastAnswer object to mark it as scored
                         transaction.update(playerDocRef, {
                             score: currentScore + scoreDelta,
                             lastAnswer: {...playerAnswer, pointsAwarded: scoreDelta},
@@ -510,6 +548,7 @@
         let gameContent = document.getElementById('game-content');
 
         async function hostGameLoop() {
+            // Only run if this client is the host, in TV mode, and not paused
             if (!db || gameState.hostId !== userId || gameState.isPaused || document.hidden) return;
 
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
@@ -521,32 +560,37 @@
                 case 'question':
                     const timeElapsed = now - gameState.questionStartTime;
                     
+                    // Time's up for the question
                     if (timeElapsed >= QUESTION_TIME_SECONDS * 1000) {
                         const currentQ = gameState.questions[gameState.currentQuestion];
                         updatePayload.status = 'reveal';
                         updatePayload.correctAnswer = currentQ.answer;
-                        updatePayload.questionStartTime = now;
+                        updatePayload.questionStartTime = now; // Reset timer for the reveal phase
                         updatePayload.transitionTimeEnd = now + INTERMISSION_TIME_SECONDS * 1000;
                         shouldUpdate = true;
                         
+                        // Calculate scores before revealing
                         await calculateAndScore();
                         playTTS(`Time is up! The correct answer is ${currentQ.answer}`);
                     }
                     break;
 
                 case 'reveal':
+                    // Time's up for the answer reveal
                     if (now >= gameState.transitionTimeEnd) {
                         const nextQuestionIndex = gameState.currentQuestion + 1;
                         
                         if (nextQuestionIndex < gameState.totalQuestions) {
+                            // Move to intermission (scoreboard)
                             updatePayload.status = 'intermission';
                             updatePayload.questionStartTime = now;
-                            updatePayload.transitionTimeEnd = now + 5000;
+                            updatePayload.transitionTimeEnd = now + 5000; // 5-second scoreboard
                             shouldUpdate = true;
                             playTTS("Here are the current scores before the next round.");
                         } else {
+                            // Game over
                             updatePayload.status = 'finished';
-                            updatePayload.currentQuestion = -1;
+                            updatePayload.currentQuestion = -1; // Reset question index
                             updatePayload.questionStartTime = now;
                             shouldUpdate = true;
                             playTTS("The game is over! Let's see the final scores.");
@@ -555,14 +599,16 @@
                     break;
                     
                 case 'intermission':
+                    // Time's up for the scoreboard
                     if (now >= gameState.transitionTimeEnd) {
                         const nextQuestionIndex = gameState.currentQuestion + 1;
                         
                         if (nextQuestionIndex < gameState.totalQuestions) {
+                            // Move to the next question
                             updatePayload.status = 'question';
                             updatePayload.currentQuestion = nextQuestionIndex;
                             updatePayload.questionStartTime = now;
-                            updatePayload.correctAnswer = null;
+                            updatePayload.correctAnswer = null; // Clear correct answer
                             updatePayload.transitionTimeEnd = 0;
                             shouldUpdate = true;
                             playTTS(`Question number ${nextQuestionIndex + 1}!`);
@@ -572,6 +618,7 @@
                     
                 case 'lobby':
                 case 'finished':
+                    // Do nothing, wait for host to start/delete
                     break;
             }
 
@@ -609,6 +656,7 @@
         }
         
         function startHostLoop() {
+            // Ensure only one loop is running
             if (isTVMode && gameState.hostId === userId && !gameLoopInterval) {
                 gameLoopInterval = setInterval(hostGameLoop, 1000);
             }
@@ -642,7 +690,12 @@
         function renderPlayerView(view) {
             switch (view) {
                 case 'join':
-                    renderJoinForm(); 
+                    // *** BUGFIX ***
+                    // Only render the join form if it doesn't already exist.
+                    // This prevents re-rendering and losing input focus.
+                    if (!document.getElementById('join-form')) {
+                        renderJoinForm();
+                    }
                     break;
                 case 'lobby':
                     renderLobbyPlayer();
@@ -668,12 +721,13 @@
         }
         
         function renderJoinForm() {
+            // Player colors
             let colors = ['#e91e63', '#9c27b0', '#ff6600', '#ffffff', '#9e9e9e', '#795548', '#4caf50', '#ffeb3b'];
             let selectedColor = colors[0];
 
             function colorSelectorHTML() {
                 return colors.map(c => `
-                    <button type="button" data-color="${c}" style="background-color: ${c};" 
+                    <button type="button" data-color="${c}" style="background-color: ${c}; border-color: ${(c === '#ffffff' || c === '#ffeb3b') ? '#444' : 'transparent'};" 
                         class="color-btn w-10 h-10 rounded-full mx-1 shadow-lg border-2 ${c === selectedColor ? 'border-white ring-2 ring-creepy-orange' : 'border-gray-500'}"
                         onclick="window.selectColor('${c}')"></button>
                 `).join('');
@@ -683,7 +737,6 @@
                 selectedColor = c;
                 document.querySelectorAll('.color-btn').forEach(btn => {
                     btn.classList.remove('border-white', 'ring-2', 'ring-creepy-orange');
-                    btn.style.borderColor = (c === '#ffffff' || c === '#ffeb3b') ? '#444' : 'transparent';
                     if (btn.dataset.color === c) {
                         btn.classList.add('border-white', 'ring-2', 'ring-creepy-orange');
                     }
@@ -714,6 +767,7 @@
             `;
             gameContent.innerHTML = html;
             
+            // Attach listener
             document.getElementById('join-form').onsubmit = (e) => {
                 e.preventDefault();
                 const name = document.getElementById('player-name').value.trim();
@@ -738,8 +792,8 @@
 
         function renderQuestionPlayer() {
             const questionIndex = gameState.currentQuestion;
+            if (questionIndex < 0 || !gameState.questions[questionIndex]) return;
             const currentQ = gameState.questions[questionIndex];
-            if (!currentQ) return;
 
             const isAnswered = userData?.lastAnswer?.questionIndex === questionIndex;
             const answeredKey = isAnswered ? userData.lastAnswer.answer : null;
@@ -788,12 +842,16 @@
 
         function renderScoringPlayer() {
             const questionIndex = gameState.currentQuestion;
+            if (questionIndex < 0 || !gameState.questions[questionIndex]) return;
             const currentQ = gameState.questions[questionIndex];
             const correctKey = gameState.correctAnswer;
             const playerAnswer = userData?.lastAnswer;
-            const isAnsweredCorrectly = playerAnswer?.questionIndex === questionIndex && playerAnswer?.answer === correctKey;
-            const points = playerAnswer?.pointsAwarded || 0;
-            const answeredKey = playerAnswer?.answer;
+            
+            // Check if the last answer matches the current question
+            const isRelevantAnswer = playerAnswer?.questionIndex === questionIndex;
+            const isAnsweredCorrectly = isRelevantAnswer && playerAnswer?.answer === correctKey;
+            const points = isRelevantAnswer ? (playerAnswer?.pointsAwarded || 0) : 0;
+            const answeredKey = isRelevantAnswer ? playerAnswer?.answer : null;
 
             const feedbackTitle = isAnsweredCorrectly ? 
                 `<h3 class="text-4xl text-green-400 font-extrabold"><i class="fas fa-bolt mr-2"></i>CORRECT! +${points}</h3>` :
@@ -809,6 +867,7 @@
                     classes = 'bg-green-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-green-400 opacity-100';
                     icon = '<i class="fas fa-check ml-2"></i>';
                 } else if (key === answeredKey) {
+                    // Highlight player's wrong answer
                     classes = 'bg-red-600 p-4 rounded-xl text-xl font-bold w-full text-center ring-4 ring-red-400 opacity-100';
                     icon = '<i class="fas fa-times ml-2"></i>';
                 }
@@ -869,7 +928,7 @@
                         ${playerRankings || '<li class="text-center text-gray-500 p-4">Waiting for scores...</li>'}
                     </ul>
                     
-                    <p class="mt-8 text-lg text-gray-400 animate-pulse">Waiting for Host to continue...</p>
+                    ${!isFinal ? '<p class="mt-8 text-lg text-gray-400 animate-pulse">Waiting for Host to continue...</p>' : ''}
                 </div>
             `;
             gameContent.innerHTML = html;
@@ -877,6 +936,7 @@
 
         function renderTVView(view) {
             const isHost = gameState.hostId === userId;
+            // Ensure the host loop is started if this user is the host
             startHostLoop();
 
             switch (view) {
@@ -908,12 +968,15 @@
             const deleteBtn = `<button onclick="window.deleteGame()" class="bg-red-500 hover:bg-red-600 text-white p-3 rounded-xl font-bold transition-all btn-host shadow-red-700/50">
                 <i class="fas fa-trash mr-2"></i> DELETE GAME
             </button>`;
+            
+            // Only show pause/resume if game is in progress
+            const showPause = gameState.status === 'question' || gameState.status === 'reveal' || gameState.status === 'intermission';
 
             return `
                 <div class="mt-6 p-4 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
                     <h3 class="text-sm font-semibold text-gray-400 mb-2">HOST CONTROLS</h3>
                     <div class="flex flex-wrap gap-3">
-                        ${pauseBtn}
+                        ${showPause ? pauseBtn : ''}
                         ${deleteBtn}
                     </div>
                     ${gameState.isPaused ? '<p class="text-sm text-yellow-400 mt-2">Game is paused. Automated transitions are halted.</p>' : ''}
@@ -926,6 +989,7 @@
             const playerCount = Object.keys(gameState.players).length;
             const sortedPlayers = Object.values(gameState.players).sort((a, b) => b.score - a.score);
             const isFinal = view === 'finished';
+            // Use the base URL without any query params for the join link
             const appUrl = window.location.origin + window.location.pathname;
             
             let mainContent = '';
@@ -980,15 +1044,12 @@
                 </div>
             `;
             gameContent.innerHTML = html;
-            window.startGame = startGame;
-            window.deleteGame = deleteGame;
         }
 
         function renderGameScreenTV(view) {
             const isHost = gameState.hostId === userId;
             const questionIndex = gameState.currentQuestion;
-            const currentQ = gameState.questions[questionIndex];
-            const isReveal = view === 'reveal';
+            
             const isIntermission = view === 'intermission';
             
             if (isIntermission) {
@@ -996,11 +1057,18 @@
                 return;
             }
 
-            if (!currentQ) return;
+            // Check for valid question
+            if (questionIndex < 0 || !gameState.questions[questionIndex]) {
+                 gameContent.innerHTML = `<div class="card p-6 text-center text-2xl">Loading next question...</div>`;
+                 return;
+            }
+            const currentQ = gameState.questions[questionIndex];
+            const isReveal = view === 'reveal';
 
             const timeRemaining = isReveal ? 0 : Math.max(0, QUESTION_TIME_SECONDS - Math.floor((Date.now() - gameState.questionStartTime) / 1000));
             const timerPercent = isReveal ? 0 : (timeRemaining / QUESTION_TIME_SECONDS) * 100;
             
+            // Tally answers
             const answerTally = { 'A': 0, 'B': 0, 'C': 0, 'D': 0 };
             let totalAnswered = 0;
             Object.values(gameState.players).forEach(p => {
@@ -1010,7 +1078,7 @@
                 }
             });
             const playerCount = Object.keys(gameState.players).length;
-            const totalWidth = isReveal ? totalAnswered : playerCount;
+            const totalWidth = isReveal ? Math.max(1, totalAnswered) : playerCount; // Avoid division by zero
 
             const optionsMap = { A: 'bg-red-700', B: 'bg-blue-700', C: 'bg-yellow-700', D: 'bg-green-700' };
 
@@ -1118,16 +1186,19 @@
         }
 
         function setupListeners() {
+            // Listener for the main game document
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             onSnapshot(gameDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     gameState = { ...gameState, ...docSnap.data() };
                 } else if (userId && isTVMode) {
-                    initializeGameData().catch(e => console.error("Failed to initialize game:", e));
+                    // If doc is deleted (e.g., by host) and this is the host, re-initialize
+                    initializeGameData().catch(e => console.error("Failed to re-initialize game:", e));
                 }
                 render();
             });
             
+            // Listener for the players collection
             const playersColRef = collection(db, PLAYERS_COLLECTION);
             onSnapshot(playersColRef, (snapshot) => {
                 const newPlayers = {};
@@ -1144,8 +1215,11 @@
                 render();
             });
             
+            // Fallback render loop for player mode to update timer bars (if any)
             if (!isTVMode) {
-                setInterval(render, 1000); 
+                // This is less critical now but can be useful for UI animations
+                // Let's remove it to prevent unnecessary re-renders
+                // setInterval(render, 1000); 
             }
         }
 
@@ -1167,24 +1241,29 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
+                    // Auth is ready, set up listeners
                     setupListeners();
+                    // Call render once auth is complete to move from "Checking in"
                     render();
                 } else {
+                    // No user, sign in anonymously
                     try {
                          await signInAnonymously(auth);
                     } catch (error) {
-                        console.error("Authentication Failed:", error);
+                        console.error("Anonymous Authentication Failed:", error);
                         showMessage("Failed to sign in. Live features disabled.", true);
                     }
                 }
             });
         }
 
+        // Make key functions globally accessible for inline HTML onClicks
         window.togglePause = togglePause;
         window.deleteGame = deleteGame;
         window.startGame = startGame;
         window.submitAnswer = submitAnswer;
-        window.selectColor = window.selectColor;
+        // window.selectColor is attached inside renderJoinForm
+
     </script>
 </body>
 </html>

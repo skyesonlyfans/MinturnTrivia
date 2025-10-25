@@ -9,10 +9,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #ff6600; /* Orange */
-            --secondary-color: #800080; /* Purple */
-            --background-color: #1a1a1a; /* Dark background */
-            --text-color: #ffffff; /* White text */
+            --primary-color: #ff6600;
+            --secondary-color: #800080;
+            --background-color: #1a1a1a;
+            --text-color: #ffffff;
         }
         body {
             font-family: 'Inter', sans-serif;
@@ -49,7 +49,6 @@
             transform: translateY(4px);
         }
         
-        /* Answer Button Styling for Player View */
         .btn-answer {
             transition: all 0.2s ease-in-out;
             transform: scale(1);
@@ -66,18 +65,16 @@
             cursor: not-allowed;
         }
 
-        /* TV Answer Reveal Animation */
         .tv-option-reveal {
             opacity: 0.2;
             transition: all 0.5s ease-out;
         }
         .tv-option-reveal.correct-answer {
             opacity: 1;
-            background-color: #10b981 !important; /* Green */
+            background-color: #10b981 !important;
             transform: scale(1.05);
         }
         
-        /* Timer Bar */
         #timer-bar-container {
             height: 12px;
             background-color: #555;
@@ -89,89 +86,70 @@
             height: 100%;
             background-color: #ff6600;
             width: 100%;
-            transition: width 1s linear; /* Smooth visual decay */
+            transition: width 1s linear;
         }
     </style>
 </head>
 <body>
 
-    <!-- Main Application Container -->
     <div id="app" class="flex flex-col items-center p-4 sm:p-8">
-        <!-- Main Title -->
         <h1 class="text-6xl sm:text-7xl font-bold mb-4 text-creepy-orange tracking-widest text-center">
             Halloween Trivia
         </h1>
 
-        <!-- Content will be rendered here based on state (Lobby, Game, Scoreboard) -->
         <div id="game-content" class="w-full max-w-6xl">
-            <!-- Loading/Error State Placeholder -->
             <div id="loading-state" class="card p-6 text-center">
                 <i class="fas fa-ghost fa-spin text-4xl text-creepy-orange mb-4"></i>
-                <p class="text-xl">Loading Crypt...</p>
+                <p class="text-xl">Checking in...</p>
             </div>
         </div>
 
-        <!-- System Message Box -->
         <div id="message-box" class="fixed bottom-4 left-1/2 -translate-x-1/2 card p-3 opacity-0 transition-opacity duration-300 pointer-events-none z-50">
             <p id="message-text" class="text-sm"></p>
         </div>
 
-        <!-- TV/Display Mode Button -->
         <button id="tv-mode-btn" class="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-full transition duration-150 shadow-lg text-xs z-50">
             TV Display Mode
         </button>
     </div>
 
-    <!-- Firebase Imports -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, onSnapshot, collection, query, runTransaction, updateDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-const firebaseConfig = {
-  apiKey: "AIzaSyD2qmDEWrqKERcEQf36THyzYb3ip8TLQf4",
-  authDomain: "minturntrivia.firebaseapp.com",
-  projectId: "minturntrivia",
-  storageBucket: "minturntrivia.firebasestorage.app",
-  messagingSenderId: "465699900511",
-  appId: "1:465699900511:web:a1b7019bc82a5407881fea",
-  measurementId: "G-VEX4W50GEE"
-};
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, runTransaction, updateDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global Firebase instances and user state
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { };
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trivia-app';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+
         let app;
         let db;
         let auth;
         let userId;
-        let userData; // Stores the current user's profile (name, score)
+        let userData;
 
         const APP_COLLECTION = `artifacts/${appId}/public/data/game-state`;
         const PLAYERS_COLLECTION = `artifacts/${appId}/public/data/players`;
         const GAME_DOC_ID = 'main-game';
         
-        // Game Constants
         const QUESTION_TIME_SECONDS = 15;
         const INTERMISSION_TIME_SECONDS = 10;
         
-        // Local state
         let gameState = {
-            status: 'loading', // 'lobby', 'question', 'reveal', 'intermission', 'finished'
+            status: 'loading',
             currentQuestion: -1, 
             questions: [],
-            hostId: null, // Host is always the first user who triggers initialization
+            hostId: null,
             isPaused: false,
-            questionStartTime: 0, // Timestamp when the current state started (for timing)
+            questionStartTime: 0,
             players: {},
             correctAnswer: null,
-            transitionTimeEnd: 0, // Used for intermission timer
+            transitionTimeEnd: 0,
         };
         
-        // Host-only variables for the automated game loop
         let gameLoopInterval = null;
 
-        // =========================================================================
-        // --- Utility Functions ---
-        // =========================================================================
-        
         function showMessage(text, isError = false) {
             const messageBox = document.getElementById('message-box');
             const messageText = document.getElementById('message-text');
@@ -185,7 +163,6 @@ const firebaseConfig = {
             }, 3000);
         }
 
-        // TTS Utilities (Same as previous, required for audio feedback)
         function base64ToArrayBuffer(base64) {
             const binaryString = window.atob(base64);
             const len = binaryString.length;
@@ -209,12 +186,10 @@ const firebaseConfig = {
             const buffer = new ArrayBuffer(44 + dataLength);
             const view = new DataView(buffer);
             
-            // RIFF chunk descriptor
             writeString(view, 0, 'RIFF');
             view.setUint32(4, 36 + dataLength, true);
             writeString(view, 8, 'WAVE');
             
-            // FMT sub-chunk
             writeString(view, 12, 'fmt ');
             view.setUint32(16, 16, true); 
             view.setUint16(20, 1, true); 
@@ -224,11 +199,9 @@ const firebaseConfig = {
             view.setUint16(32, numChannels * (bitsPerSample / 8), true); 
             view.setUint16(34, bitsPerSample, true); 
             
-            // DATA sub-chunk
             writeString(view, 36, 'data');
             view.setUint32(40, dataLength, true);
             
-            // Write PCM data
             let offset = 44;
             for (let i = 0; i < pcm16.length; i++) {
                 view.setInt16(offset, pcm16[i], true);
@@ -247,11 +220,10 @@ const firebaseConfig = {
                 },
                 model: "gemini-2.5-flash-preview-tts"
             };
-            const apiKey = ""; // Canvas provides this dynamically
+            const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
 
             try {
-                // Implement exponential backoff for API call
                 const maxRetries = 3;
                 let attempt = 0;
                 let response;
@@ -300,10 +272,6 @@ const firebaseConfig = {
             }
         }
         
-        // =========================================================================
-        // --- Game Logic Functions ---
-        // =========================================================================
-        
         async function fetchQuestions() {
             try {
                 const response = await fetch('trivia.json.txt');
@@ -312,7 +280,6 @@ const firebaseConfig = {
                 return data;
             } catch (e) {
                 console.error("Failed to load trivia questions:", e);
-                // Hardcoded fallback data if file access fails
                 return [
                     { category: "Fallback", question: "What ancient festival is the origin of Halloween?", options: { "A": "Beltane", "B": "Samhain", "C": "Lughnasadh", "D": "Yule" }, answer: "B" },
                     { category: "Fallback", question: "In the film *Halloween*, what mask does Michael Myers wear?", options: { "A": "Clown", "B": "Shatner", "C": "Hockey", "D": "Ghostface" }, answer: "B" },
@@ -320,20 +287,14 @@ const firebaseConfig = {
             }
         }
 
-        /**
-         * Initializes the game state in Firestore (Host/TV only).
-         */
         async function initializeGameData() {
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             
-            // Check if game exists and is ready for host assignment
-            const docSnap = await updateDoc(gameDocRef, { 
+            await updateDoc(gameDocRef, { 
                 hostId: userId 
             }).catch(async (e) => {
-                // If update fails, the document likely doesn't exist, so create it.
                 if (e.code === 'not-found') {
                     const questions = await fetchQuestions();
-                    // Shuffle questions
                     for (let i = questions.length - 1; i > 0; i--) {
                         const j = Math.floor(Math.random() * (i + 1));
                         [questions[i], questions[j]] = [questions[j], questions[i]];
@@ -357,9 +318,6 @@ const firebaseConfig = {
             });
         }
         
-        /**
-         * Resets the entire game state and deletes player documents.
-         */
         async function deleteGame() {
             if (gameState.hostId !== userId) {
                 showMessage("Only the host can reset the game.", true);
@@ -367,31 +325,25 @@ const firebaseConfig = {
             }
             if (!confirm('Are you sure you want to delete the entire game and all player data?')) return;
 
-            // 1. Delete Game State Document
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             await deleteDoc(gameDocRef);
             
-            // 2. Delete All Player Documents (Requires fetching all and deleting individually)
             const playerDocsQuery = query(collection(db, PLAYERS_COLLECTION));
             const playerDocsSnapshot = await getDocs(playerDocsQuery);
             const deletePromises = playerDocsSnapshot.docs.map(doc => deleteDoc(doc.ref));
             await Promise.all(deletePromises);
             
-            // Re-initialize state to trigger lobby refresh
             showMessage("Game has been completely deleted. Starting fresh...");
             await initializeGameData();
         }
 
-        /**
-         * Host-only function to start/resume/pause the game.
-         */
         async function togglePause(shouldPause) {
             if (gameState.hostId !== userId) return;
             
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             await updateDoc(gameDocRef, {
                 isPaused: shouldPause,
-                questionStartTime: Date.now(), // Reset start time to current time on resume
+                questionStartTime: Date.now(),
                 lastUpdate: Date.now(),
             });
             showMessage(shouldPause ? "Game Paused." : "Game Resumed!");
@@ -400,9 +352,6 @@ const firebaseConfig = {
             }
         }
 
-        /**
-         * Attempts to join the game (Player view only).
-         */
         async function joinGame(name, color) {
             if (!userId) { showMessage("Authentication failed.", true); return; }
             
@@ -413,9 +362,9 @@ const firebaseConfig = {
                     name: name,
                     color: color,
                     score: 0,
-                    lastAnswer: null, // {questionIndex: 0, answer: 'A', timeTaken: 500}
+                    lastAnswer: null,
                     joinedAt: Date.now(),
-                }, { merge: true }); // Use merge to avoid overwriting existing player data (name/color) if rejoining
+                }, { merge: true });
                 showMessage(`Welcome, ${name}!`);
             } catch (e) {
                 console.error("Error joining game: ", e);
@@ -423,9 +372,6 @@ const firebaseConfig = {
             }
         }
         
-        /**
-         * Player function to submit an answer.
-         */
         async function submitAnswer(answerKey) {
             if (gameState.status !== 'question' || !userData || gameState.isPaused) return;
             
@@ -453,9 +399,6 @@ const firebaseConfig = {
             }
         }
         
-        /**
-         * Host-only function to score all answers for the current question.
-         */
         async function calculateAndScore() {
             const currentQ = gameState.questions[gameState.currentQuestion];
             const correctKey = currentQ.answer;
@@ -471,10 +414,9 @@ const firebaseConfig = {
                 const player = gameState.players[playerId];
                 const playerAnswer = player?.lastAnswer;
                 
-                // Only process answers for the current question that haven't been scored
                 if (playerAnswer && 
                     playerAnswer.questionIndex === gameState.currentQuestion && 
-                    !playerAnswer.pointsAwarded // Check if points were already awarded
+                    !playerAnswer.pointsAwarded
                     ) {
                     
                     await runTransaction(db, async (transaction) => {
@@ -485,7 +427,6 @@ const firebaseConfig = {
                         let scoreDelta = 0;
 
                         if (playerAnswer.answer === correctKey) {
-                            // Points based on speed: 500 base + up to 500 bonus
                             const timeTaken = Math.min(playerAnswer.timeTaken, maxTimeMs);
                             const timeRatio = 1 - (timeTaken / maxTimeMs);
                             scoreDelta = 500 + Math.round(timeRatio * 500); 
@@ -500,11 +441,6 @@ const firebaseConfig = {
             }
         }
 
-        // =========================================================================
-        // --- Host/TV Game Loop (Automated Control) ---
-        // Runs only on the client where `isTVMode` is true.
-        // =========================================================================
-
         const isTVMode = window.location.search.includes('view=tv');
         let gameContent = document.getElementById('game-content');
         let tvModeBtn = document.getElementById('tv-mode-btn');
@@ -518,20 +454,17 @@ const firebaseConfig = {
         }
 
         async function hostGameLoop() {
-            if (!db || gameState.hostId !== userId || gameState.isPaused || !document.hidden) return;
+            if (!db || gameState.hostId !== userId || gameState.isPaused || document.hidden) return;
 
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             const now = Date.now();
             let updatePayload = { lastUpdate: now };
             let shouldUpdate = false;
             
-            // --- State Logic ---
-            
             switch (gameState.status) {
                 case 'question':
                     const timeElapsed = now - gameState.questionStartTime;
                     
-                    // If time is up, transition to 'reveal'
                     if (timeElapsed >= QUESTION_TIME_SECONDS * 1000) {
                         const currentQ = gameState.questions[gameState.currentQuestion];
                         updatePayload.status = 'reveal';
@@ -540,26 +473,22 @@ const firebaseConfig = {
                         updatePayload.transitionTimeEnd = now + INTERMISSION_TIME_SECONDS * 1000;
                         shouldUpdate = true;
                         
-                        // Score answers immediately before the UI updates
                         await calculateAndScore();
                         playTTS(`Time is up! The correct answer is ${currentQ.answer}`);
                     }
                     break;
 
                 case 'reveal':
-                    // If in reveal state, wait for the transition time to end
                     if (now >= gameState.transitionTimeEnd) {
                         const nextQuestionIndex = gameState.currentQuestion + 1;
                         
                         if (nextQuestionIndex < gameState.totalQuestions) {
-                            // Transition to 'intermission' (brief scoreboard before next question)
                             updatePayload.status = 'intermission';
                             updatePayload.questionStartTime = now;
-                            updatePayload.transitionTimeEnd = now + 5000; // Show scoreboard for 5 seconds
+                            updatePayload.transitionTimeEnd = now + 5000;
                             shouldUpdate = true;
                             playTTS("Here are the current scores before the next round.");
                         } else {
-                            // Game finished
                             updatePayload.status = 'finished';
                             updatePayload.currentQuestion = -1;
                             updatePayload.questionStartTime = now;
@@ -570,7 +499,6 @@ const firebaseConfig = {
                     break;
                     
                 case 'intermission':
-                    // If intermission is over, transition to the next question
                     if (now >= gameState.transitionTimeEnd) {
                         const nextQuestionIndex = gameState.currentQuestion + 1;
                         
@@ -588,7 +516,6 @@ const firebaseConfig = {
                     
                 case 'lobby':
                 case 'finished':
-                    // Do nothing, wait for host interaction (Start/Delete Game)
                     break;
             }
 
@@ -625,16 +552,11 @@ const firebaseConfig = {
             });
         }
         
-        // Start the host loop only if in TV mode and authorized
         function startHostLoop() {
             if (isTVMode && gameState.hostId === userId && !gameLoopInterval) {
-                gameLoopInterval = setInterval(hostGameLoop, 1000); // Check every second
+                gameLoopInterval = setInterval(hostGameLoop, 1000);
             }
         }
-
-        // =========================================================================
-        // --- Rendering and View Management ---
-        // =========================================================================
 
         function render() {
             let view = 'loading';
@@ -649,7 +571,7 @@ const firebaseConfig = {
             } else if (gameState.status === 'reveal') {
                 view = 'reveal';
             } else if (gameState.status === 'intermission') {
-                view = 'scoreboard'; // Use scoreboard view during intermission
+                view = 'scoreboard';
             } else if (gameState.status === 'finished') {
                 view = 'scoreboard';
             }
@@ -661,12 +583,9 @@ const firebaseConfig = {
             }
         }
         
-        // --- PLAYER VIEW RENDERING ---
-
         function renderPlayerView(view) {
             switch (view) {
                 case 'join':
-                    // Re-use logic from previous version for join form
                     renderJoinForm(); 
                     break;
                 case 'lobby':
@@ -676,7 +595,7 @@ const firebaseConfig = {
                     renderQuestionPlayer();
                     break;
                 case 'reveal':
-                case 'intermission': // Player sees answer reveal until next question starts
+                case 'intermission':
                     renderScoringPlayer();
                     break;
                 case 'scoreboard':
@@ -899,13 +818,9 @@ const firebaseConfig = {
             gameContent.innerHTML = html;
         }
 
-
-        // --- TV VIEW RENDERING ---
-
         function renderTVView(view) {
-            // Check if user is the Host
             const isHost = gameState.hostId === userId;
-            startHostLoop(); // Ensure the host loop is running if applicable
+            startHostLoop();
 
             switch (view) {
                 case 'lobby':
@@ -975,7 +890,7 @@ const firebaseConfig = {
                         ${isHost ? `<p class="text-xl text-gray-400">Press DELETE GAME to clear data and start a new lobby.</p>` : ''}
                     </div>
                 `;
-            } else { // Lobby
+            } else {
                 const playersList = Object.values(gameState.players)
                     .map(p => `<li class="p-2 text-xl font-semibold rounded-lg bg-gray-700/50 my-1 shadow" style="color:${p.color};">${p.name}</li>`)
                     .join('');
@@ -1029,7 +944,6 @@ const firebaseConfig = {
             const timeRemaining = isReveal ? 0 : Math.max(0, QUESTION_TIME_SECONDS - Math.floor((Date.now() - gameState.questionStartTime) / 1000));
             const timerPercent = isReveal ? 0 : (timeRemaining / QUESTION_TIME_SECONDS) * 100;
             
-            // Player Answer Tally
             const answerTally = { 'A': 0, 'B': 0, 'C': 0, 'D': 0 };
             let totalAnswered = 0;
             Object.values(gameState.players).forEach(p => {
@@ -1072,24 +986,20 @@ const firebaseConfig = {
 
             const html = `
                 <div class="card p-10 mt-4">
-                    <!-- Top Bar -->
                     <div class="flex justify-between items-center mb-6 pb-2 border-b-4 border-creepy-purple">
                         <p class="text-3xl text-creepy-purple font-extrabold">Q${questionIndex + 1} / ${gameState.totalQuestions}</p>
                         ${timerDisplay}
                         <p class="text-3xl text-gray-400 font-extrabold">${currentQ.category}</p>
                     </div>
 
-                    <!-- Timer Bar -->
                     ${!isReveal ? `<div id="timer-bar-container" class="mb-6"><div id="timer-bar" style="width: ${timerPercent}%;"></div></div>` : ''}
                     
                     <h2 class="text-5xl font-extrabold mb-10 text-center">${currentQ.question}</h2>
                     
-                    <!-- Answers Grid -->
                     <div id="answer-options" class="grid grid-cols-2 gap-6">
                         ${optionsHTML}
                     </div>
                     
-                    <!-- Status/Host Info -->
                     <div class="mt-8 text-center text-2xl text-gray-400">
                         ${isReveal ? 
                             `Next Intermission in: ${Math.max(0, Math.ceil((gameState.transitionTimeEnd - Date.now()) / 1000))}s` :
@@ -1150,23 +1060,17 @@ const firebaseConfig = {
             gameContent.innerHTML = html;
         }
 
-        // =========================================================================
-        // --- Firebase Listeners and Authentication ---
-        // =========================================================================
-
         function setupListeners() {
-            // 1. Game State Listener
             const gameDocRef = doc(db, APP_COLLECTION, GAME_DOC_ID);
             onSnapshot(gameDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     gameState = { ...gameState, ...docSnap.data() };
                 } else if (userId && isTVMode) {
-                    // Only TV mode tries to initialize the game if it's missing
                     initializeGameData().catch(e => console.error("Failed to initialize game:", e));
                 }
+                render();
             });
             
-            // 2. All Players Listener (Includes current user's profile)
             const playersColRef = collection(db, PLAYERS_COLLECTION);
             onSnapshot(playersColRef, (snapshot) => {
                 const newPlayers = {};
@@ -1180,10 +1084,9 @@ const firebaseConfig = {
                 });
                 gameState.players = newPlayers;
                 userData = currentUserData;
-                render(); // Re-render UI after any data change
+                render();
             });
             
-            // 3. Client-side timer update for immediate UI feedback (non-host)
             if (!isTVMode) {
                 setInterval(render, 1000); 
             }
@@ -1207,7 +1110,8 @@ const firebaseConfig = {
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
-                    setupListeners(); 
+                    setupListeners();
+                    render();
                 } else {
                     try {
                         if (initialAuthToken) {
@@ -1217,7 +1121,6 @@ const firebaseConfig = {
                         }
                     } catch (error) {
                         console.error("Authentication Failed:", error);
-                        // If auth fails, we can't play multiplayer
                         showMessage("Failed to sign in. Live features disabled.", true);
                     }
                 }
@@ -1226,9 +1129,7 @@ const firebaseConfig = {
 
         window.onload = initializeAppAndAuth;
         window.togglePause = togglePause;
-        window.deleteGame = deleteGame; // Expose delete for host button
+        window.deleteGame = deleteGame;
     </script>
 </body>
 </html>
-
-

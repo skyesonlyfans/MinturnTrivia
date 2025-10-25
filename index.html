@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minturn Family Halloween Trivia</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Font (Creepster for a Halloween vibe) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- QR Code Library for easy joining -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+
+    <style>
+        /* Custom Styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Spooky background gradient */
+            background: linear-gradient(135deg, #230b3b, #0a0211);
+            color: #e0e0e0;
+        }
+
+        .font-halloween {
+            font-family: 'Creepster', cursive;
+            letter-spacing: 2px;
+            color: #f97316; /* Orange */
+        }
+
+        /* Glassmorphism Effect */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05); /* Very light glass */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 1.5rem; /* More rounded */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(18, 0, 39, 0.37);
+        }
+
+        /* Banner Style */
+        #skye-banner {
+            @apply w-full text-center py-2 bg-purple-900 bg-opacity-70 text-pink-400 text-sm font-semibold rounded-t-lg shadow-xl;
+            font-family: 'Creepster', cursive;
+            letter-spacing: 1px;
+            margin-bottom: -1px; /* Overlap border with card */
+        }
+
+        /* Button Styles */
+        .btn {
+            @apply w-full px-6 py-3 rounded-lg text-lg font-semibold transition-all duration-300 shadow-lg;
+        }
+
+        .btn-primary {
+            @apply bg-orange-600 text-white hover:bg-orange-500 transform hover:scale-105;
+        }
+        
+        .btn-secondary {
+            @apply bg-purple-700 text-white hover:bg-purple-600 transform hover:scale-105;
+        }
+        
+        .btn-tv {
+            @apply bg-gray-700 text-gray-200 hover:bg-gray-600;
+        }
+
+        /* Option Button Styles */
+        .btn-option {
+            @apply btn bg-purple-900 bg-opacity-50 text-left text-white border-2 border-purple-700 hover:bg-purple-800 hover:border-purple-500 disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed;
+        }
+
+        .btn-option.selected {
+            @apply bg-yellow-500 border-yellow-300 text-black font-bold;
+        }
+
+        .btn-option.correct {
+            @apply bg-green-600 border-green-400 text-white font-bold;
+        }
+
+        .btn-option.incorrect {
+            @apply bg-red-700 border-red-500 text-white font-bold opacity-70;
+        }
+        
+        /* Color selection circles */
+        .color-option {
+            width: 3rem;
+            height: 3rem;
+            @apply rounded-full border-4 cursor-pointer transition-all duration-200 shadow-lg hover:ring-4 ring-offset-2 ring-offset-purple-900;
+        }
+        .color-option.selected-color {
+            @apply ring-8 ring-offset-4;
+        }
+
+        /* Custom Colors (Tailwind classes only for utility) */
+        .color-pink { background-color: #ec4899; } /* Pink-500 */
+        .color-purple { background-color: #9333ea; } /* Purple-600 */
+        .color-orange { background-color: #f97316; } /* Orange-600 */
+        .color-white { background-color: #ffffff; border-color: #a0a0a0; } 
+        .color-grey { background-color: #6b7280; } /* Gray-500 */
+        .color-brown { background-color: #8b542e; } /* Custom Brown */
+        .color-green { background-color: #10b981; } /* Emerald-500 */
+        .color-yellow { background-color: #f59e0b; } /* Amber-500 */
+
+
+        /* Loading Spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-left-color: #f97316; /* Orange */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Hide elements helper */
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen w-full flex items-center justify-center p-4">
+
+    <!-- Main Application Container -->
+    <div id="app" class="w-full max-w-lg">
+        
+        <!-- Skye Banner -->
+        <div id="skye-banner" class="hidden">Presented by Skye &lt;3</div>
+
+        <!-- 0. Loading View -->
+        <div id="view-loading" class="glass-card p-8 text-center">
+            <h1 class="font-halloween text-5xl mb-4">Halloween Trivia</h1>
+            <div class="flex justify-center items-center flex-col gap-4">
+                <div class="spinner"></div>
+                <p class="text-lg text-gray-300">Connecting to the spirit world...</p>
+            </div>
+        </div>
+        
+        <!-- 1. Main Menu View -->
+        <div id="view-menu" class="hidden">
+            <div class="glass-card p-8 text-center shadow-2xl relative">
+                <button id="menu-tv-view-btn" class="absolute top-4 right-4 btn btn-tv px-4 py-2 text-sm">Display Mode</button>
+
+                <h1 class="font-halloween text-6xl mb-4">Minturn Halloween Trivia</h1>
+                <p class="text-xl text-gray-300 mb-8">Choose your challenge.</p>
+                <div class="space-y-4">
+                    <button id="start-player-flow-btn" class="btn btn-primary">Start Game</button>
+                    <!-- Display mode button moved to corner -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Login View (Name and Color Selection) -->
+        <div id="view-login" class="hidden">
+            <div class="glass-card p-8 text-center shadow-2xl">
+                <h1 class="font-halloween text-5xl mb-6">Enter The Crypt</h1>
+                <div class="space-y-6">
+                    <input type="text" id="name-input" placeholder="Enter your spooky name" class="w-full px-4 py-3 rounded-lg bg-gray-900 bg-opacity-70 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                    
+                    <h3 class="text-xl font-semibold mb-2 text-orange-400">Choose Your Color</h3>
+                    <div id="color-selection" class="flex flex-wrap justify-center gap-4">
+                        <!-- Color options injected by JS -->
+                    </div>
+                    
+                    <button id="join-game-btn" class="btn btn-primary mt-6" disabled>Join Game</button>
+                    <button id="back-to-menu-btn" class="btn btn-tv">Back to Menu</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Lobby View -->
+        <div id="view-lobby" class="hidden">
+            <div class="glass-card p-8">
+                <h2 class="text-3xl font-bold text-center mb-6">Waiting Room</h2>
+                <p class="text-center text-gray-300 mb-4">Players in the crypt:</p>
+                <div id="lobby-player-list" class="space-y-2 min-h-[100px] max-h-[30vh] overflow-y-auto bg-black bg-opacity-20 p-4 rounded-lg">
+                    <!-- Player names will be injected here -->
+                </div>
+                <!-- Host-only Start Button -->
+                <div id="host-start-container" class="mt-6 hidden">
+                    <button id="start-game-btn" class="btn btn-primary">Start Game</button>
+                </div>
+                <button id="leave-game-btn" class="btn btn-tv mt-4">Leave Game</button>
+                <p class="text-center text-sm text-gray-400 mt-4">User ID: <code id="user-id-display" class="bg-black bg-opacity-30 px-1 rounded">...</code></p>
+            </div>
+        </div>
+
+        <!-- 4. Question View (Player) -->
+        <div id="view-question" class="hidden">
+            <div class="glass-card p-8">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="question-category" class="text-orange-400 font-semibold">Category</span>
+                    <span id="question-counter" class="text-gray-300 font-bold">1 / 50</span>
+                </div>
+                <h2 id="question-text" class="text-2xl font-bold mb-6 min-h-[100px]">Question text will appear here...</h2>
+                <div id="question-options" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Option buttons will be injected here -->
+                </div>
+                <div id="question-waiting-msg" class="hidden text-center mt-6">
+                    <p class="text-xl font-semibold text-yellow-400">Locked In! Waiting for other ghouls...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Answer/Leaderboard View -->
+        <div id="view-answer" class="hidden">
+            <div class="glass-card p-8">
+                <h2 id="answer-result-text" class="text-3xl font-bold text-center mb-4">Correct!</h2>
+                <p id="answer-correct-answer-text" class="text-center text-lg mb-6">The correct answer was: B</p>
+                
+                <h3 class="text-2xl font-bold text-orange-400 text-center mb-4">Scores</h3>
+                <div id="answer-leaderboard" class="space-y-2 max-h-[30vh] overflow-y-auto bg-black bg-opacity-20 p-4 rounded-lg">
+                    <!-- Leaderboard will be injected here -->
+                </div>
+                
+                <button id="next-question-btn" class="btn btn-primary mt-6">Next Question</button>
+            </div>
+        </div>
+
+        <!-- 6. Winner View -->
+        <div id="view-winner" class="hidden">
+            <div class="glass-card p-8 text-center">
+                <h1 class="font-halloween text-6xl text-yellow-400 mb-4">We have a Winner!</h1>
+                <h2 id="winner-name" class="text-4xl font-bold mb-8">Winner's Name</h2>
+                <h3 class="text-2xl font-bold text-orange-400 mb-4">Final Scores</h3>
+                <div id="winner-leaderboard" class="space-y-2 max-h-[30vh] overflow-y-auto bg-black bg-opacity-20 p-4 rounded-lg mb-8">
+                    <!-- Final Leaderboard -->
+                </div>
+                <button id="play-again-btn" class="btn btn-secondary">Play Again?</button>
+            </div>
+        </div>
+
+        <!-- 7. TV View (Requires separate window, max-w-6xl applied via JS) -->
+        <div id="view-tv" class="hidden w-full max-w-6xl">
+            <div class="glass-card p-12 w-full">
+                <h1 class="font-halloween text-7xl text-center mb-8">Minturn Halloween Trivia</h1>
+                
+                <!-- TV Lobby -->
+                <div id="tv-lobby" class="text-center">
+                    <h2 class="text-5xl font-bold mb-8">Waiting for players to join...</h2>
+                    
+                    <h3 class="text-3xl text-orange-400 mb-4">Scan to Join the Crypt:</h3>
+                    <div id="qr-code-container" class="bg-white p-4 inline-block rounded-xl mb-8 shadow-2xl">
+                        <canvas id="qr-canvas"></canvas>
+                    </div>
+
+                    <h3 class="text-3xl text-orange-400 mb-4">Players in the Crypt:</h3>
+                    <div id="tv-lobby-players" class="text-2xl space-y-2">
+                        <!-- TV player list -->
+                    </div>
+                </div>
+
+                <!-- TV Question -->
+                <div id="tv-question" class="hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <span id="tv-question-category" class="text-3xl text-orange-400 font-semibold">Category</span>
+                        <span id="tv-question-counter" class="text-3xl text-gray-300 font-bold">1 / 50</span>
+                    </div>
+                    <h2 id="tv-question-text" class="text-5xl font-bold mb-10 min-h-[150px]">Question text...</h2>
+                    <div id="tv-question-options" class="grid grid-cols-2 gap-6 text-3xl">
+                        <!-- TV options -->
+                    </div>
+                    <div class="mt-8 text-center">
+                        <p class="text-4xl font-bold mt-8 text-center text-yellow-400"><span id="tv-locked-in-count">0</span> / <span id="tv-total-players">0</span> players locked in</p>
+                    </div>
+                </div>
+
+                <!-- TV Answer -->
+                <div id="tv-answer" class="hidden">
+                    <h2 id="tv-answer-text" class="text-5xl font-bold text-center mb-10">The correct answer was... B!</h2>
+                    <div id="tv-answer-options" class="grid grid-cols-2 gap-6 text-3xl mb-10">
+                        <!-- TV options with correct highlighted -->
+                    </div>
+                    <h3 class="text-4xl font-bold text-orange-400 text-center mb-4">Scores</h3>
+                    <div id="tv-leaderboard" class="space-y-3 text-2xl">
+                        <!-- TV leaderboard -->
+                    </div>
+                </div>
+
+                <!-- TV Winner -->
+                <div id="tv-winner" class="hidden text-center">
+                    <h1 class="font-halloween text-8xl text-yellow-400 mb-8">Winner!</h1>
+                    <h2 id="tv-winner-name" class="text-7xl font-bold mb-10">Winner's Name</h2>
+                    <h3 class="text-4xl font-bold text-orange-400 text-center mb-4">Final Scores</h3>
+                    <div id="tv-winner-leaderboard" class="space-y-3 text-2xl">
+                        <!-- TV final leaderboard -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div> <!-- End #app -->
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Firebase Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken,
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc, 
+            updateDoc, 
+            onSnapshot, 
+            collection, 
+            query,
+            writeBatch,
+            increment,
+            deleteDoc // Import for player deletion
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- PLAYER COLOR DEFINITIONS ---
+        const PLAYER_COLORS = {
+            Pink: { class: "color-pink", ring: "ring-pink-400" },
+            Purple: { class: "color-purple", ring: "ring-purple-400" },
+            Orange: { class: "color-orange", ring: "ring-orange-400" },
+            White: { class: "color-white", ring: "ring-gray-300" },
+            Grey: { class: "color-grey", ring: "ring-gray-300" },
+            Brown: { class: "color-brown", ring: "ring-yellow-800" },
+            Green: { class: "color-green", ring: "ring-green-400" },
+            Yellow: { class: "color-yellow", ring: "ring-yellow-400" }
+        };
+
+        // --- TRIVIA QUESTIONS ---
+        const triviaQuestions = [
+          {
+            "category": "Halloween History",
+            "question": "What ancient Celtic festival is considered the origin of Halloween?",
+            "options": {"A": "Beltane", "B": "Samhain", "C": "Imbolc", "D": "Lughnasadh"},
+            "answer": "B"
+          },
+          {
+            "category": "Halloween History",
+            "question": "Which country did Halloween originate in?",
+            "options": {"A": "Ireland", "B": "Scotland", "C": "Wales", "D": "England"},
+            "answer": "A"
+          },
+          {
+            "category": "Halloween History",
+            "question": "What was the original purpose of wearing costumes on Halloween?",
+            "options": {"A": "To celebrate harvest", "B": "To disguise from spirits", "C": "To attract wealth", "D": "To honor gods"},
+            "answer": "B"
+          },
+          {
+            "category": "Halloween History",
+            "question": "Which Catholic observance influenced the name 'Halloween'?",
+            "options": {"A": "All Souls’ Day", "B": "All Saints’ Day", "C": "Epiphany", "D": "Feast of the Dead"},
+            "answer": "B"
+          },
+          {
+            "category": "Halloween History",
+            "question": "What vegetable was originally used to make jack-o’-lanterns?",
+            "options": {"A": "Turnip", "B": "Pumpkin", "C": "Beet", "D": "Radish"},
+            "answer": "A"
+          },
+          {
+            "category": "Halloween History",
+            "question": "In what century did Halloween begin to evolve into its modern form?",
+            "options": {"A": "8th", "B": "10th", "C": "12th", "D": "15th"},
+            "answer": "A"
+          },
+          {
+            "category": "Halloween History",
+            "question": "When did trick-or-treating become widespread in the U.S.?",
+            "options": {"A": "1920s", "B": "1930s", "C": "1950s", "D": "1970s"},
+            "answer": "C"
+          },
+          {
+            "category": "Halloween History",
+            "question": "What do bonfires symbolize in the ancient Samhain tradition?",
+            "options": {"A": "Light guiding spirits", "B": "Sacrifice to gods", "C": "End of harvest", "D": "Protection from evil"},
+            "answer": "D"
+          },
+          {
+            "category": "Halloween History",
+            "question": "What color combination is traditionally associated with Halloween?",
+            "options": {"A": "Black and orange", "B": "Green and purple", "C": "Red and gold", "D": "White and blue"},
+            "answer": "A"
+          },
+          {
+            "category": "Halloween History",
+            "question": "What ancient people celebrated Samhain?",
+            "options": {"A": "Romans", "B": "Vikings", "C": "Celts", "D": "Greeks"},
+            "answer": "C"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "Who directed the original 1978 film *Halloween*?",
+            "options": {"A": "John Carpenter", "B": "Wes Craven", "C": "Tobe Hooper", "D": "George Romero"},
+            "answer": "A"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "What mask does Michael Myers wear in *Halloween*?",
+            "options": {"A": "Hockey mask", "B": "William Shatner mask", "C": "Clown mask", "D": "Ghost mask"},
+            "answer": "B"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "Who is the killer in *Friday the 13th* (1980)?",
+            "options": {"A": "Jason Voorhees", "B": "Pamela Voorhees", "C": "Tommy Jarvis", "D": "Freddy Krueger"},
+            "answer": "B"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "In *A Nightmare on Elm Street*, how does Freddy Krueger kill his victims?",
+            "options": {"A": "In their dreams", "B": "With a knife", "C": "With fire", "D": "By drowning"},
+            "answer": "A"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "Which film popularized the phrase 'Do you like scary movies?'",
+            "options": {"A": "Scream", "B": "Urban Legend", "C": "Final Destination", "D": "I Know What You Did Last Summer"},
+            "answer": "A"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "What is the setting of *The Shining*?",
+            "options": {"A": "An isolated hotel", "B": "A haunted house", "C": "A summer camp", "D": "A ship"},
+            "answer": "A"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "Which horror movie features a possessed doll named Annabelle?",
+            "options": {"A": "Child’s Play", "B": "The Conjuring", "C": "Annabelle", "D": "Sinister"},
+            "answer": "C"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "What cursed object is central to *The Ring*?",
+            "options": {"A": "Videotape", "B": "Mirror", "C": "Photograph", "D": "Book"},
+            "answer": "A"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "Who directed *Get Out*?",
+            "options": {"A": "Jordan Peele", "B": "James Wan", "C": "Ari Aster", "D": "Robert Eggers"},
+            "answer": "A"
+          },
+          {
+            "category": "Horror Movies",
+            "question": "Which 1999 film used 'found footage' to create realism?",
+            "options": {"A": "The Blair Witch Project", "B": "Paranormal Activity", "C": "REC", "D": "Cloverfield"},
+            "answer": "A"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "Which real-life killer inspired *Psycho* and *The Texas Chainsaw Massacre*?",
+            "options": {"A": "Ted Bundy", "B": "Ed Gein", "C": "John Wayne Gacy", "D": "Jeffrey Dahmer"},
+            "answer": "B"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "What was the nickname of the unidentified San Francisco killer active in the 1960s?",
+            "options": {"A": "The Zodiac Killer", "B": "The Night Stalker", "C": "The Axeman", "D": "The Phantom"},
+            "answer": "A"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "Which serial killer was known as 'The Killer Clown'?",
+            "options": {"A": "Ted Bundy", "B": "John Wayne Gacy", "C": "Dennis Rader", "D": "David Berkowitz"},
+            "answer": "B"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "Which serial killer targeted college women in the 1970s?",
+            "options": {"A": "Ted Bundy", "B": "Jeffrey Dahmer", "C": "Ed Kemper", "D": "Gary Ridgway"},
+            "answer": "A"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "Who was known as 'The Milwaukee Cannibal'?",
+            "options": {"A": "Ted Bundy", "B": "Ed Gein", "C": "Jeffrey Dahmer", "D": "Richard Ramirez"},
+            "answer": "C"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "What does 'BTK' stand for in Dennis Rader’s nickname?",
+            "options": {"A": "Bind Torture Kill", "B": "Burn Tie Kill", "C": "Beat Trap Kill", "D": "Bind Track Kill"},
+            "answer": "A"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "Which killer sent taunting letters to police and media in San Francisco?",
+            "options": {"A": "BTK", "B": "Zodiac Killer", "C": "Son of Sam", "D": "Green River Killer"},
+            "answer": "B"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "Which serial killer was known as 'Son of Sam'?",
+            "options": {"A": "David Berkowitz", "B": "Richard Ramirez", "C": "Charles Manson", "D": "Aileen Wuornos"},
+            "answer": "A"
+          },
+          {
+            "category": "Famous Killers",
+            "question": "Which cult leader orchestrated the Tate-LaBianca murders?",
+            "options": {"A": "Charles Manson", "B": "David Koresh", "C": "Jim Jones", "D": "Marshall Applewhite"},
+            "answer": "A"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "Which creature transforms during a full moon?",
+            "options": {"A": "Vampire", "B": "Werewolf", "C": "Zombie", "D": "Ghoul"},
+            "answer": "B"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "What is traditionally a vampire’s weakness?",
+            "options": {"A": "Garlic", "B": "Silver bullets", "C": "Fire", "D": "Salt"},
+            "answer": "A"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "Which mythical creature drinks blood to survive?",
+            "options": {"A": "Wendigo", "B": "Vampire", "C": "Ghoul", "D": "Demon"},
+            "answer": "B"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "What must you do to kill a werewolf?",
+            "options": {"A": "Stab with silver", "B": "Burn", "C": "Stake the heart", "D": "Use sunlight"},
+            "answer": "A"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "Which monster is reanimated from corpses?",
+            "options": {"A": "Zombie", "B": "Frankenstein’s Monster", "C": "Ghoul", "D": "Mummy"},
+            "answer": "B"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "What creature guards the underworld in Greek mythology?",
+            "options": {"A": "Hydra", "B": "Cerberus", "C": "Minotaur", "D": "Medusa"},
+            "answer": "B"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "Which mythical figure is known for turning people to stone?",
+            "options": {"A": "Medusa", "B": "Sphinx", "C": "Lamia", "D": "Hecate"},
+            "answer": "A"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "Which monster is wrapped in bandages?",
+            "options": {"A": "Ghoul", "B": "Zombie", "C": "Mummy", "D": "Lich"},
+            "answer": "C"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "What does a witch traditionally ride?",
+            "options": {"A": "Broomstick", "B": "Cauldron", "C": "Cat", "D": "Wind"},
+            "answer": "A"
+          },
+          {
+            "category": "Monsters & Myths",
+            "question": "Which demon is said to cause sleep paralysis?",
+            "options": {"A": "Incubus", "B": "Succubus", "C": "Banshee", "D": "Poltergeist"},
+            "answer": "A"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "Which 2019 film features a Swedish midsummer festival with dark rituals?",
+            "options": {"A": "Hereditary", "B": "Midsommar", "C": "It Follows", "D": "The Witch"},
+            "answer": "B"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "Which 2015 film introduced the sexually transmitted curse 'It Follows'?",
+            "options": {"A": "Sinister", "B": "The Babadook", "C": "It Follows", "D": "Us"},
+            "answer": "C"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "In *The Wicker Man* (1973), where is the island located?",
+            "options": {"A": "Scotland", "B": "Ireland", "C": "Norway", "D": "Wales"},
+            "answer": "A"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "What symbol often represents cultic horror?",
+            "options": {"A": "Circle", "B": "Triangle", "C": "Pentagram", "D": "Eye"},
+            "answer": "C"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "Which 2008 horror film features masked intruders tormenting a couple?",
+            "options": {"A": "You're Next", "B": "The Strangers", "C": "Them", "D": "Us"},
+            "answer": "B"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "Who directed *Hereditary*?",
+            "options": {"A": "Jordan Peele", "B": "Ari Aster", "C": "Robert Eggers", "D": "Mike Flanagan"},
+            "answer": "B"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "What eerie 2013 film centers around astral projection?",
+            "options": {"A": "Sinister", "B": "Insidious", "C": "The Conjuring", "D": "Mama"},
+            "answer": "B"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "What year was *The Blair Witch Project* released?",
+            "options": {"A": "1997", "B": "1999", "C": "2001", "D": "2003"},
+            "answer": "B"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "Which cult horror features a ritual at an isolated manor house?",
+            "options": {"A": "The Invitation", "B": "The Lodge", "C": "Barbarian", "D": "The Endless"},
+            "answer": "A"
+          },
+          {
+            "category": "Cult Horror",
+            "question": "Which cult horror blends religion and possession in 1973?",
+            "options": {"A": "The Omen", "B": "The Exorcist", "C": "Rosemary’s Baby", "D": "Carrie"},
+            "answer": "B"
+          }
+        ];
+        
+        // --- Firebase Config ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trivia-app';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- Firebase Services ---
+        let app, auth, db;
+        
+        // --- Game State ---
+        let currentUserId = null;
+        let localPlayerName = "";
+        let localPlayerColor = "";
+        let playersList = []; // Local cache of all players: [{ id, name, score, currentAnswer, color }]
+        let gameSateListener = null; 
+        let playersListener = null;
+        let isTvView = false;
+        let isHost = false; 
+        const WINNING_SCORE = 20;
+        const GAME_ID = "main_halloween_game"; 
+
+        // --- Firestore References ---
+        const getGameRef = () => doc(db, `artifacts/${appId}/public/data/trivia_game`, GAME_ID);
+        const getPlayersColRef = () => collection(db, `artifacts/${appId}/public/data/trivia_game/${GAME_ID}/players`);
+        const getPlayerRef = (uid) => doc(db, `artifacts/${appId}/public/data/trivia_game/${GAME_ID}/players`, uid);
+
+        // --- UI Element References ---
+        const views = {
+            loading: document.getElementById('view-loading'),
+            menu: document.getElementById('view-menu'),
+            login: document.getElementById('view-login'),
+            lobby: document.getElementById('view-lobby'),
+            question: document.getElementById('view-question'),
+            answer: document.getElementById('view-answer'),
+            winner: document.getElementById('view-winner'),
+            tv: document.getElementById('view-tv'),
+        };
+
+        const tvViews = {
+            lobby: document.getElementById('tv-lobby'),
+            question: document.getElementById('tv-question'),
+            answer: document.getElementById('tv-answer'),
+            winner: document.getElementById('tv-winner'),
+        }
+
+        const skyeBanner = document.getElementById('skye-banner');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        let selectedColor = null;
+
+        // --- UI Helper Functions ---
+
+        /**
+         * Hides all views and shows the one specified by ID.
+         * @param {string} viewId - The key of the view to show (e.g., 'login', 'lobby')
+         */
+        function showView(viewId) {
+            const appContainer = document.getElementById('app');
+            skyeBanner.classList.add('hidden'); // Hide banner by default
+
+            if (viewId === 'tv') {
+                appContainer.classList.remove('max-w-lg');
+                appContainer.classList.add('max-w-6xl');
+                isTvView = true;
+            } else {
+                appContainer.classList.add('max-w-lg');
+                appContainer.classList.remove('max-w-6xl');
+                isTvView = false;
+                // Show banner on game screens (not menu or login)
+                if (viewId !== 'menu' && viewId !== 'login' && viewId !== 'loading') {
+                    skyeBanner.classList.remove('hidden'); 
+                }
+            }
+
+            for (const key in views) {
+                views[key].classList.add('hidden');
+            }
+            if (views[viewId]) {
+                views[viewId].classList.remove('hidden');
+            } else {
+                console.error(`View '${viewId}' not found.`);
+                views.loading.classList.remove('hidden');
+            }
+            
+            // Special handling for TV Lobby to generate QR code on display
+            if (viewId === 'tv') {
+                showTvPanel('lobby'); // Default TV view to lobby
+                generateQrCode();
+            }
+        }
+
+        function showTvPanel(panelId) {
+            for (const key in tvViews) {
+                tvViews[key].classList.add('hidden');
+            }
+            if (tvViews[panelId]) {
+                tvViews[panelId].classList.remove('hidden');
+            }
+        }
+        
+        /**
+         * Renders the color selection options.
+         */
+        function renderColorSelection() {
+            const colorContainer = document.getElementById('color-selection');
+            colorContainer.innerHTML = '';
+            
+            Object.keys(PLAYER_COLORS).forEach(colorName => {
+                const colorData = PLAYER_COLORS[colorName];
+                const btn = document.createElement('div');
+                btn.className = `color-option ${colorData.class} ${colorData.ring}`;
+                btn.dataset.colorName = colorName;
+                btn.title = colorName;
+                
+                // If the player has a local stored color, pre-select it
+                if (localPlayerColor === colorName) {
+                    btn.classList.add('selected-color');
+                    selectedColor = colorName;
+                    joinGameBtn.disabled = false;
+                }
+
+                btn.onclick = () => {
+                    // Deselect all
+                    document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected-color'));
+                    // Select current
+                    btn.classList.add('selected-color');
+                    selectedColor = colorName;
+                    joinGameBtn.disabled = false;
+                };
+                colorContainer.appendChild(btn);
+            });
+        }
+
+
+        /**
+         * Renders the list of players in the lobby, using their chosen color.
+         */
+        function renderLobbyList() {
+            const playerListEl = document.getElementById('lobby-player-list');
+            const tvPlayerListEl = document.getElementById('tv-lobby-players');
+            
+            if (!playerListEl || !tvPlayerListEl) return;
+            
+            playerListEl.innerHTML = ""; 
+            tvPlayerListEl.innerHTML = ""; 
+            
+            // Show/Hide host start button
+            const hostStartContainer = document.getElementById('host-start-container');
+            if (hostStartContainer) {
+                // The host (first player to join) can start the game at any time
+                if (isHost) {
+                    hostStartContainer.classList.remove('hidden');
+                } else {
+                    hostStartContainer.classList.add('hidden');
+                }
+            }
+
+
+            if (playersList.length === 0) {
+                const noPlayersMsg = `<p class="text-gray-400">No one has braved the crypt yet...</p>`;
+                playerListEl.innerHTML = noPlayersMsg;
+                tvPlayerListEl.innerHTML = noPlayersMsg;
+                return;
+            }
+
+            // Sort by join time to make the host easy to determine
+            const sortedPlayers = [...playersList].sort((a, b) => a.joinTime - b.joinTime);
+
+            sortedPlayers.forEach((player) => {
+                const hostTag = player.isHost ? ' (Host) 👻' : '';
+                const colorData = PLAYER_COLORS[player.color] || { class: "text-gray-200" }; // Fallback color
+                const colorClass = colorData.class.replace('color-', 'text-'); // Convert bg class to text color class
+                
+                // Player View List Item
+                const playerEl = document.createElement('p');
+                playerEl.className = `text-lg font-semibold ${colorClass} text-opacity-100`;
+                playerEl.textContent = `${player.name}${hostTag}`;
+                playerListEl.appendChild(playerEl);
+
+                // TV View List Item
+                const tvPlayerEl = document.createElement('p');
+                tvPlayerEl.className = `text-2xl font-bold ${colorClass} text-opacity-100`;
+                tvPlayerEl.textContent = player.name;
+                tvPlayerListEl.appendChild(tvPlayerEl);
+            });
+        }
+
+        /**
+         * Generates the QR code for joining the game.
+         */
+        function generateQrCode() {
+            if (!isTvView) return;
+
+            const qrCanvas = document.getElementById('qr-canvas');
+            if (!qrCanvas) return;
+
+            // Get the base URL without the ?view=tv parameter
+            let joinUrl = window.location.href;
+            const url = new URL(joinUrl);
+            url.searchParams.delete('view');
+            joinUrl = url.toString();
+
+            try {
+                // Clear the canvas first
+                const context = qrCanvas.getContext('2d');
+                context.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
+
+                // Generate the QR code using the canvas
+                new QRCode(qrCanvas, {
+                    text: joinUrl,
+                    width: 256,
+                    height: 256,
+                    colorDark : "#0a0211", // Dark color for QR
+                    colorLight : "#ffffff", // White background
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+            } catch (e) {
+                console.error("Error generating QR code:", e);
+            }
+        }
+
+
+        /**
+         * Renders the leaderboard on the Answer and Winner views.
+         */
+        function renderLeaderboards(gameData) {
+            // Filter out players who might have left (no current user ID) if necessary, but sort all visible players
+            const sortedPlayers = [...playersList].sort((a, b) => b.score - a.score);
+            
+            const containers = [
+                document.getElementById('answer-leaderboard'),
+                document.getElementById('winner-leaderboard'),
+                document.getElementById('tv-leaderboard'),
+                document.getElementById('tv-winner-leaderboard')
+            ];
+
+            containers.forEach(container => {
+                if (!container) return;
+                container.innerHTML = ""; // Clear
+                sortedPlayers.forEach(player => {
+                    const colorData = PLAYER_COLORS[player.color] || { class: "text-gray-200" }; 
+                    const colorClass = colorData.class.replace('color-', 'text-');
+                    
+                    const el = document.createElement('div');
+                    el.className = "flex justify-between items-center bg-black bg-opacity-20 px-4 py-2 rounded";
+                    el.innerHTML = `
+                        <span class="font-bold ${colorClass}">${player.name}</span>
+                        <span class="text-xl font-extrabold text-orange-400">${player.score}</span>
+                    `;
+                    container.appendChild(el);
+                });
+            });
+        }
+
+        function renderQuestion(questionIndex) {
+            const q = triviaQuestions[questionIndex];
+            if (!q) {
+                console.error(`Question index ${questionIndex} out of bounds.`);
+                if (isHost) resetGame();
+                return;
+            }
+
+            const qNum = questionIndex + 1;
+            const qTotal = triviaQuestions.length;
+
+            // --- Player View ---
+            document.getElementById('question-category').textContent = q.category;
+            document.getElementById('question-counter').textContent = `${qNum} / ${qTotal}`;
+            document.getElementById('question-text').textContent = q.question;
+            
+            const optionsContainer = document.getElementById('question-options');
+            optionsContainer.innerHTML = ""; 
+            
+            ['A', 'B', 'C', 'D'].forEach(key => {
+                const optionEl = document.createElement('button');
+                optionEl.id = `option-${key}`;
+                optionEl.className = "btn btn-option";
+                optionEl.dataset.key = key;
+                optionEl.innerHTML = `<span class="font-bold mr-2">${key}:</span> ${q.options[key]}`;
+                optionEl.onclick = () => submitAnswer(key);
+                optionsContainer.appendChild(optionEl);
+            });
+            
+            document.getElementById('question-waiting-msg').classList.add('hidden');
+
+            // --- TV View ---
+            document.getElementById('tv-question-category').textContent = q.category;
+            document.getElementById('tv-question-counter').textContent = `${qNum} / ${qTotal}`;
+            document.getElementById('tv-question-text').textContent = q.question;
+
+            const tvOptionsContainer = document.getElementById('tv-question-options');
+            tvOptionsContainer.innerHTML = ""; 
+
+            ['A', 'B', 'C', 'D'].forEach(key => {
+                const tvOptionEl = document.createElement('div');
+                tvOptionEl.id = `tv-option-${key}`;
+                tvOptionEl.className = "bg-purple-900 bg-opacity-50 p-6 rounded-lg border-2 border-purple-700";
+                tvOptionEl.innerHTML = `<span class="font-bold mr-3">${key}:</span> ${q.options[key]}`;
+                tvOptionsContainer.appendChild(tvOptionEl);
+            });
+        }
+        
+        function renderAnswerView(questionIndex, myAnswer) {
+            const q = triviaQuestions[questionIndex];
+            const correctAnswer = q.answer;
+
+            // --- Player View ---
+            const resultTextEl = document.getElementById('answer-result-text');
+            if (myAnswer === correctAnswer) {
+                resultTextEl.textContent = "Correct!";
+                resultTextEl.className = "text-3xl font-bold text-center mb-4 text-green-400";
+            } else {
+                resultTextEl.textContent = "Incorrect!";
+                resultTextEl.className = "text-3xl font-bold text-center mb-4 text-red-500";
+            }
+            document.getElementById('answer-correct-answer-text').textContent = `The correct answer was: ${correctAnswer} - ${q.options[correctAnswer]}`;
+
+            // --- TV View ---
+            document.getElementById('tv-answer-text').textContent = `The correct answer was: ${correctAnswer} - ${q.options[correctAnswer]}`;
+            const tvOptionsContainer = document.getElementById('tv-answer-options');
+            tvOptionsContainer.innerHTML = ""; 
+
+            ['A', 'B', 'C', 'D'].forEach(key => {
+                const tvOptionEl = document.createElement('div');
+                tvOptionEl.id = `tv-option-${key}`;
+                let classes = "p-6 rounded-lg border-2 ";
+                if (key === correctAnswer) {
+                    classes += "bg-green-600 border-green-400 text-white font-bold";
+                } else {
+                    classes += "bg-gray-800 border-gray-700 opacity-60";
+                }
+                tvOptionEl.className = classes;
+                tvOptionEl.innerHTML = `<span class="font-bold mr-3">${key}:</span> ${q.options[key]}`;
+                tvOptionsContainer.appendChild(tvOptionEl);
+            });
+        }
+
+        function renderWinnerView(winnerName) {
+            // Player View
+            document.getElementById('winner-name').textContent = winnerName;
+            // TV View
+            document.getElementById('tv-winner-name').textContent = winnerName;
+        }
+
+        // --- Firebase Auth ---
+
+        async function initFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        document.getElementById('user-id-display').textContent = currentUserId;
+                        await initializeGameListeners();
+                    } else {
+                        await signIn();
+                    }
+                });
+
+            } catch (e) {
+                console.error("Error initializing Firebase:", e);
+                document.getElementById('view-loading').innerHTML = `<p class="text-red-500">Error connecting. Please refresh.</p>`;
+            }
+        }
+
+        async function signIn() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Authentication Error:", error);
+                document.getElementById('view-loading').innerHTML = `<p class="text-red-500">Authentication failed. Please refresh.</p>`;
+            }
+        }
+
+        // --- Game Logic ---
+
+        async function initializeGameListeners() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('view') === 'tv') {
+                isTvView = true;
+                showView('tv');
+            } else {
+                // Try to retrieve existing player data
+                const playerDoc = await getDoc(getPlayerRef(currentUserId));
+                if (playerDoc.exists()) {
+                    const data = playerDoc.data();
+                    localPlayerName = data.name;
+                    localPlayerColor = data.color;
+                    // Proceed to game flow check
+                } else {
+                    showView('menu');
+                    renderColorSelection();
+                }
+            }
+            
+            // Unsubscribe existing listeners
+            if (gameSateListener) gameSateListener();
+            if (playersListener) playersListener();
+
+            // --- Listen to Game State ---
+            gameSateListener = onSnapshot(getGameRef(), (docSnap) => {
+                const gameData = docSnap.data();
+
+                if (!docSnap.exists() || !gameData.gameState) {
+                    // Game document is missing or corrupted
+                    if (!isTvView && localPlayerName) {
+                        // If a player is trying to join a non-existent game, they become the host and initialize it
+                        isHost = true;
+                        resetGame(true); // Initialize the game document
+                    } else if (isTvView) {
+                        showView('tv');
+                        showTvPanel('lobby');
+                    } else if (docSnap.exists()) {
+                         // If doc exists but no state, player should wait for host to start
+                        showView('menu'); 
+                    }
+                    return;
+                }
+                
+                handleGameStateChange(gameData);
+            });
+
+            // --- Listen to Players Collection ---
+            playersListener = onSnapshot(getPlayersColRef(), (querySnapshot) => {
+                playersList = [];
+                querySnapshot.forEach((doc) => {
+                    playersList.push({ id: doc.id, ...doc.data() });
+                });
+                
+                if (playersList.length > 0) {
+                    // Host check logic: Find the player whose joinTime is the earliest.
+                    const sortedPlayers = playersList.sort((a, b) => a.joinTime - b.joinTime);
+                    const newHostId = sortedPlayers[0].id;
+                    isHost = newHostId === currentUserId;
+                    
+                    // Update host status in database if necessary (if the original host left)
+                    if (isHost && !sortedPlayers[0].isHost) {
+                         // Update player's host status only if this is the new host
+                        updateDoc(getPlayerRef(newHostId), { isHost: true }).catch(e => console.error("Error setting new host status:", e));
+                    }
+                } else {
+                    isHost = false; // No players left
+                }
+
+                handlePlayersChange();
+            });
+        }
+
+        function handleGameStateChange(gameData) {
+            const state = gameData.gameState;
+            const qIndex = gameData.currentQuestionIndex;
+
+            // Update TV locked-in count
+            if (isTvView) {
+                document.getElementById('tv-locked-in-count').textContent = gameData.playersLocked || 0;
+                document.getElementById('tv-total-players').textContent = playersList.length;
+            }
+
+            // Route to the correct view
+            switch (state) {
+                case 'lobby':
+                    showView(isTvView ? 'tv' : 'lobby');
+                    if (isTvView) showTvPanel('lobby');
+                    break;
+                case 'question':
+                    // If player is in lobby or menu, push them into question view
+                    renderQuestion(qIndex);
+                    showView(isTvView ? 'tv' : 'question');
+                    if (isTvView) showTvPanel('question');
+                    break;
+                case 'answer':
+                    const myPlayer = playersList.find(p => p.id === currentUserId);
+                    renderAnswerView(qIndex, myPlayer ? myPlayer.currentAnswer : null);
+                    showView(isTvView ? 'tv' : 'answer');
+                    if (isTvView) showTvPanel('answer');
+                    break;
+                case 'winner':
+                    renderWinnerView(gameData.winnerName);
+                    showView(isTvView ? 'tv' : 'winner');
+                    if (isTvView) showTvPanel('winner');
+                    break;
+            }
+        }
+
+        function handlePlayersChange() {
+            renderLobbyList();
+            renderLeaderboards();
+
+            const gameRef = getGameRef();
+            getDoc(gameRef).then(gameDoc => {
+                const gameData = gameDoc.data();
+                if (!gameData || gameData.gameState !== 'question') return; 
+
+                const answeredPlayers = playersList.filter(p => p.currentAnswer != null).length;
+                const totalPlayers = playersList.length;
+
+                if (isTvView) {
+                    document.getElementById('tv-locked-in-count').textContent = answeredPlayers;
+                    document.getElementById('tv-total-players').textContent = totalPlayers;
+                }
+
+                // Auto-advance if all players have answered
+                if (totalPlayers > 0 && answeredPlayers === totalPlayers && isHost) {
+                    processAnswers(gameData);
+                }
+            });
+        }
+
+        async function processAnswers(gameData) {
+            const qIndex = gameData.currentQuestionIndex;
+            const q = triviaQuestions[qIndex];
+            const correctAnswer = q.answer;
+            
+            let winnerFound = null;
+            const batch = writeBatch(db);
+
+            playersList.forEach(player => {
+                let newScore = player.score;
+                if (player.currentAnswer === correctAnswer) {
+                    newScore += 1;
+                }
+                
+                const playerRef = getPlayerRef(player.id);
+                batch.update(playerRef, { score: newScore });
+
+                if (newScore >= WINNING_SCORE) {
+                    winnerFound = player.name; 
+                }
+            });
+
+            const gameRef = getGameRef();
+            if (winnerFound) {
+                batch.update(gameRef, {
+                    gameState: "winner",
+                    winnerName: winnerFound
+                });
+            } else {
+                batch.update(gameRef, {
+                    gameState: "answer"
+                });
+            }
+
+            try {
+                await batch.commit();
+            } catch (e) {
+                console.error("Error processing answers:", e);
+            }
+        }
+
+
+        // --- Button Click Handlers ---
+
+        document.getElementById('start-player-flow-btn').onclick = () => {
+            showView('login');
+            renderColorSelection();
+        };
+
+        document.getElementById('back-to-menu-btn').onclick = () => {
+            showView('menu');
+        };
+
+        document.getElementById('join-game-btn').onclick = async () => {
+            if (!selectedColor) {
+                console.error("Please select a color.");
+                return;
+            }
+
+            const nameInput = document.getElementById('name-input');
+            const name = nameInput.value.trim();
+            if (name.length < 2) {
+                nameInput.classList.add('border-red-500');
+                return;
+            }
+            nameInput.classList.remove('border-red-500');
+            localPlayerName = name;
+            localPlayerColor = selectedColor;
+            
+            const playerRef = getPlayerRef(currentUserId);
+            const playerDocSnap = await getDoc(playerRef);
+
+            const isFirstPlayer = playersList.length === 0;
+
+            const playerData = {
+                name: localPlayerName,
+                score: 0,
+                currentAnswer: null,
+                // Only set isHost to true if they are the true first player to join this session
+                isHost: isFirstPlayer, 
+                joinTime: playerDocSnap.exists() ? playerDocSnap.data().joinTime : Date.now(), 
+                color: localPlayerColor
+            };
+            
+            try {
+                await setDoc(playerRef, playerData, { merge: true });
+            } catch (e) {
+                console.error("Error joining game:", e);
+            }
+        };
+
+        document.getElementById('menu-tv-view-btn').onclick = () => {
+            // Opens the current URL with the ?view=tv parameter in a new tab
+            const url = new URL(window.location.href);
+            url.searchParams.set('view', 'tv');
+            window.open(url.toString(), '_blank');
+        };
+
+        document.getElementById('start-game-btn').onclick = async () => {
+            if (!isHost) {
+                console.warn("Only the host can start the game.");
+                return;
+            }
+            
+            const batch = writeBatch(db);
+            // Reset all scores and answers for a new game
+            playersList.forEach(player => {
+                const playerRef = getPlayerRef(player.id);
+                batch.update(playerRef, { score: 0, currentAnswer: null });
+            });
+            
+            // Set game state to question 0
+            const gameRef = getGameRef();
+            batch.update(gameRef, {
+                gameState: "question",
+                currentQuestionIndex: 0,
+                playersLocked: 0,
+                winnerName: ""
+            });
+
+            try {
+                await batch.commit();
+            } catch (e) {
+                console.error("Error starting game:", e);
+            }
+        };
+        
+        document.getElementById('leave-game-btn').onclick = async () => {
+            try {
+                if (currentUserId) {
+                    // Delete player document
+                    await deleteDoc(getPlayerRef(currentUserId));
+                }
+                // Clear local state
+                localPlayerName = "";
+                localPlayerColor = "";
+                selectedColor = null;
+
+                // Route back to the menu
+                showView('menu');
+                // The onSnapshot listener will handle the host transition if the leaving player was the host.
+            } catch (e) {
+                console.error("Error leaving game:", e);
+                showView('menu'); // Still try to route
+            }
+        };
+
+        async function submitAnswer(answerKey) {
+            document.querySelectorAll('.btn-option').forEach(btn => {
+                btn.disabled = true;
+            });
+
+            document.getElementById(`option-${answerKey}`).classList.add('selected');
+            document.getElementById('question-waiting-msg').classList.remove('hidden');
+
+            try {
+                // Use a batch for atomic player update and lock count update
+                const batch = writeBatch(db);
+                batch.update(getPlayerRef(currentUserId), { currentAnswer: answerKey });
+                batch.update(getGameRef(), { playersLocked: increment(1) });
+                await batch.commit();
+
+            } catch (e) {
+                console.error("Error submitting answer:", e);
+            }
+        }
+
+        document.getElementById('next-question-btn').onclick = async () => {
+            if (!isHost) {
+                return;
+            }
+
+            const gameRef = getGameRef();
+            const gameDoc = await getDoc(gameRef);
+            const gameData = gameDoc.data();
+
+            const nextQuestionIndex = gameData.currentQuestionIndex + 1;
+
+            if (nextQuestionIndex >= triviaQuestions.length) {
+                const sortedPlayers = [...playersList].sort((a, b) => b.score - a.score);
+                const winnerName = sortedPlayers.length > 0 ? sortedPlayers[0].name : "No one";
+                await updateDoc(gameRef, {
+                    gameState: "winner",
+                    winnerName: winnerName
+                });
+                return;
+            }
+
+            const batch = writeBatch(db);
+            // Reset player answers for next round
+            playersList.forEach(player => {
+                const playerRef = getPlayerRef(player.id);
+                batch.update(playerRef, { currentAnswer: null });
+            });
+
+            // Set game state to next question
+            batch.update(gameRef, {
+                gameState: "question",
+                currentQuestionIndex: nextQuestionIndex,
+                playersLocked: 0
+            });
+
+            try {
+                await batch.commit();
+            } catch (e) {
+                console.error("Error moving to next question:", e);
+            }
+        };
+        
+        document.getElementById('play-again-btn').onclick = async () => {
+            if (!isHost) {
+                return;
+            }
+            await resetGame(true);
+        };
+
+        /**
+         * Resets the game state.
+         * @param {boolean} resetScores - Whether to reset player scores as well.
+         */
+        async function resetGame(resetScores = false) {
+            try {
+                const gameRef = getGameRef();
+                await setDoc(gameRef, {
+                    gameState: "lobby",
+                    currentQuestionIndex: 0,
+                    playersLocked: 0,
+                    winnerName: ""
+                }, { merge: true }); 
+
+                if (resetScores) {
+                    // Also reset player scores in a batch
+                    const batch = writeBatch(db);
+                    playersList.forEach(player => {
+                        batch.update(getPlayerRef(player.id), { score: 0, currentAnswer: null, isHost: player.isHost });
+                    });
+                    await batch.commit();
+                }
+
+            } catch (e) {
+                console.error("Error resetting game:", e);
+            }
+        }
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!firebaseConfig.apiKey) {
+                document.getElementById('view-loading').innerHTML = `
+                    <h2 class="text-2xl text-red-500 font-bold mb-4">Configuration Error</h2>
+                    <p class="text-gray-300">Firebase is not configured. This app cannot run.</p>
+                `;
+                return;
+            }
+            showView('loading');
+            initFirebase();
+        });
+
+    </script>
+</body>
+</html>
